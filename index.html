@@ -5,10 +5,96 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>SIMCCA-PERÚ — Vista Única (PRO v5)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+ <!-- Conexión con Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+  import { getDatabase, ref, onValue, set, update, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDzwPIoWMV14NyvfxykylPjpB4GpFVwW9M",
+  authDomain: "odi-gci.firebaseapp.com",
+  databaseURL: "https://odi-gci-default-rtdb.firebaseio.com",
+  projectId: "odi-gci",
+  storageBucket: "odi-gci.firebasestorage.app",
+  messagingSenderId: "324648898211",
+  appId: "1:324648898211:web:3ef3adf57747e329fc3916"
+};
 
-</script>
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_PROJECT.firebaseapp.com",
+    databaseURL: "https://TU_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "TU_PROJECT",
+    storageBucket: "TU_PROJECT.appspot.com",
+    messagingSenderId: "TU_SENDER_ID",
+    appId: "TU_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+
+  // === Sistema de conexión y sincronización ===
+  function getRoomId() {
+    const h = (location.hash || "").replace(/^#/, "").trim();
+    return h || "sala-default";
+  }
+  const ROOM_ID = getRoomId();
+  const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
+  let currentUID = null;
+
+  signInAnonymously(auth).catch(console.error);
+  onAuthStateChanged(auth, (user) => {
+    if (!user) return;
+    currentUID = user.uid;
+    const presRef = ref(db, `rooms/${ROOM_ID}/presence/${currentUID}`);
+    set(presRef, true);
+    onDisconnect(presRef).remove();
+  });
+
+  // Subir datos
+  async function pushStateToCloud(local) {
+    const payload = {
+      planes: local.planes,
+      roles: local.roles,
+      drawings: local.drawings,
+      pairs: local.pairs,
+      mode: local.mode,
+      paused: local.paused,
+      metric: local.metric,
+      altUnit: local.altUnit,
+      lastWriteBy: currentUID,
+      lastUpdate: serverTimestamp()
+    };
+    await set(stateRef, payload);
+  }
+
+  // Escuchar datos del servidor
+  onValue(stateRef, (snap) => {
+    const v = snap.val();
+    if (!v || v.lastWriteBy === currentUID) return;
+    Object.assign(st, v);
+    repaintPlanesList && repaintPlanesList();
+    repaintNav && repaintNav();
+    repaintAlt && repaintAlt();
+    repaintPairs && repaintPairs();
+    repaintStudent && repaintStudent();
+  });
+
+  // Exponer función global
+  window._SIMCCA_SYNC = {
+    push: () => pushStateToCloud(st)
+  };
+</script> 
 <style>
   :root{
     --crt:#020b03; --grid:#0d2c13; --grid2:#0e3a17; --crtLine:#2ee74f;
@@ -950,7 +1036,30 @@ $$('#pFormations button[data-form]').forEach(btn=>{
   });
 })();
 </script>
+<script>
+  let lastSync = 0;
+  function scheduleSync(){
+    const now = performance.now();
+    if(now - lastSync < 200) return; // 5 veces por segundo
+    lastSync = now;
+    window._SIMCCA_SYNC && window._SIMCCA_SYNC.push();
+  }
 
+  // Conectar con los botones
+  ['#addFighter','#addCom','#delLast','#pause','#start'].forEach(id=>{
+    const el = document.querySelector(id);
+    if(el){
+      const orig = el.onclick;
+      el.onclick = (e)=>{ orig(e); scheduleSync(); };
+    }
+  });
+
+  // Cuando se suelta el mouse (mover aviones o dibujos)
+  addEventListener('mouseup', ()=>scheduleSync());
+
+  // Enviar un primer estado al cargar
+  setTimeout(()=>scheduleSync(),1500);
+</script>
 
 </body>
 </html>
