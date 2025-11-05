@@ -3,9 +3,89 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>SIMCCA-PERÚ — Vista Única (PRO v5)</title>
+<title>SETCA-PERÚ — Vista Única (PRO v5)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+  import { getDatabase, ref, onValue, set, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyDzwPIoWMV14NyvfxykylPjpB4GpFVwW9M",
+  authDomain: "odi-gci.firebaseapp.com",
+  databaseURL: "https://odi-gci-default-rtdb.firebaseio.com",
+  projectId: "odi-gci",
+  storageBucket: "odi-gci.firebasestorage.app",
+  messagingSenderId: "324648898211",
+  appId: "1:324648898211:web:3ef3adf57747e329fc3916"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+
+  function getRoomId() {
+    const h = (location.hash || "").replace(/^#/, "").trim();
+    return h || "sala-default";
+  }
+  const ROOM_ID = getRoomId();
+  const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
+  let currentUID = null;
+
+  signInAnonymously(auth).catch(console.error);
+  onAuthStateChanged(auth, (user) => {
+    if (!user) return;
+    currentUID = user.uid;
+    const presRef = ref(db, `rooms/${ROOM_ID}/presence/${currentUID}`);
+    set(presRef, true);
+    onDisconnect(presRef).remove();
+  });
+
+  async function pushStateToCloud(local) {
+    if (!local) return;
+    const payload = {
+      planes: local.planes,
+      roles: local.roles,
+      drawings: local.drawings,
+      pairs: local.pairs,
+      mode: local.mode,
+      paused: local.paused,
+      metric: local.metric,
+      altUnit: local.altUnit,
+      lastWriteBy: currentUID,
+      lastUpdate: serverTimestamp()
+    };
+    await set(stateRef, payload);
+  }
+
+  onValue(stateRef, (snap) => {
+    const v = snap.val();
+    if (!v || v.lastWriteBy === currentUID) return;
+    try {
+      if (Array.isArray(v.planes)) st.planes = v.planes;
+      else if (v.planes && typeof v.planes === "object") st.planes = Object.values(v.planes);
+      if (v.roles) st.roles = v.roles;
+      if (v.pairs) st.pairs = v.pairs;
+      if (v.drawings) st.drawings = v.drawings;
+      if (v.mode) st.mode = v.mode;
+      if (typeof v.paused === "boolean") st.paused = v.paused;
+      if (typeof v.metric === "boolean") st.metric = v.metric;
+      if (v.altUnit) st.altUnit = v.altUnit;
+
+      repaintPlanesList && repaintPlanesList();
+      repaintNav && repaintNav();
+      repaintAlt && repaintAlt();
+      repaintPairs && repaintPairs();
+      repaintStudent && repaintStudent();
+    } catch(e){ console.warn("Apply remote state error:", e); }
+  });
+
+  window._SETCA_SYNC = {
+    push: () => pushStateToCloud(st)
+  };
+</script>
+
  <!-- Conexión con Firebase -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
@@ -88,7 +168,7 @@ const app = initializeApp(firebaseConfig);
   });
 
   // Exponer función global
-  window._SIMCCA_SYNC = {
+  window._SETCA_SYNC = {
     push: () => pushStateToCloud(st)
   };
 </script> 
@@ -185,7 +265,7 @@ const app = initializeApp(firebaseConfig);
 <body>
 <div class="app">
   <header>
-    <h1>SIMCCA-PERÚ — Vista Única (PRO v5)</h1>
+    <h1>SETCA-PERÚ — Vista Única (PRO v5)</h1>
     <button id="start" class="btn focusable">▶️ Iniciar</button>
     <button id="pause" class="btn focusable">⏸️ Pausar</button>
     <button id="reportBtn" class="btn focusable">📝 Reporte</button>
@@ -1037,7 +1117,7 @@ $$('#pFormations button[data-form]').forEach(btn=>{
     const now = performance.now();
     if(now - lastSync < 200) return; // 5 veces por segundo
     lastSync = now;
-    window._SIMCCA_SYNC && window._SIMCCA_SYNC.push();
+    window._SETCA_SYNC && window._SETCA_SYNC.push();
   }
 
   // Conectar con los botones
@@ -1053,6 +1133,27 @@ $$('#pFormations button[data-form]').forEach(btn=>{
   addEventListener('mouseup', ()=>scheduleSync());
 
   // Enviar un primer estado al cargar
+  setTimeout(()=>scheduleSync(),1500);
+</script>
+
+
+<script>
+  let _lastSync=0;
+  function scheduleSync(){
+    const now = performance.now();
+    if(now - _lastSync < 100) return;
+    _lastSync = now;
+    window._SETCA_SYNC && window._SETCA_SYNC.push();
+  }
+  // Hook to existing controls if present
+  ['#addFighter','#addCom','#delLast','#pause','#start','#uMetric','#uImperial'].forEach(id=>{
+    const el = document.querySelector(id);
+    if(el){
+      const orig = el.onclick;
+      el.onclick = (e)=>{ orig && orig(e); scheduleSync(); };
+    }
+  });
+  addEventListener('mouseup', ()=>scheduleSync());
   setTimeout(()=>scheduleSync(),1500);
 </script>
 
