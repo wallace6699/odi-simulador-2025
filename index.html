@@ -44,7 +44,6 @@
 
   async function pushStateToCloud(local) {
     if (!local) return;
-    // Include dynamic runtime elements so other clients render exactly the same
     const payload = {
       planes: local.planes,
       roles: local.roles,
@@ -54,12 +53,6 @@
       paused: local.paused,
       metric: local.metric,
       altUnit: local.altUnit,
-      missiles: local.missiles || [],
-      splashes: local.splashes || [],
-      radarFail: !!local.radarFail,
-      jammers: local.jammers || null,
-      settings: local.settings || null,
-      time: local.time || null,
       lastWriteBy: currentUID,
       lastUpdate: serverTimestamp()
     };
@@ -80,39 +73,11 @@
       if (typeof v.metric === "boolean") st.metric = v.metric;
       if (v.altUnit) st.altUnit = v.altUnit;
 
-      // Dynamic runtime fields
-      if (Array.isArray(v.missiles)) {
-        // preserve previous missile ids to show/remove notices
-        const prev = new Set((st.missiles||[]).map(m=>m.id));
-        st.missiles = v.missiles;
-        // show notices for newly appeared missiles
-        st.missiles.forEach(m=>{ if(!prev.has(m.id) && window.showLaunchNotice) window.showLaunchNotice(m); });
-      }
-      if (Array.isArray(v.splashes)) st.splashes = v.splashes;
-      if (typeof v.radarFail !== 'undefined') st.radarFail = !!v.radarFail;
-      if (v.jammers) st.jammers = v.jammers;
-      if (v.settings) st.settings = v.settings;
-      if (v.time) st.time = v.time;
-
-      // Remove notices for missiles that disappeared
-      if (Array.isArray(v.missiles)) {
-        const nowIds = new Set((v.missiles||[]).map(m=>m.id));
-        (Array.from(document.querySelectorAll('[id^="ln-"]'))||[]).forEach(node=>{
-          const nid = node.id.replace(/^ln-/, '');
-          if(!nowIds.has(nid) && window.removeLaunchNotice) window.removeLaunchNotice({id:nid});
-        });
-      }
-
       repaintPlanesList && repaintPlanesList();
       repaintNav && repaintNav();
       repaintAlt && repaintAlt();
       repaintPairs && repaintPairs();
       repaintStudent && repaintStudent();
-
-      // ensure visual drawing functions run after applying remote state
-      try{ drawMissiles && drawMissiles(); }catch(e){}
-      try{ updateMissiles && (function(){ /* allow updateMissiles to run in next frame */ })(); }catch(e){}
-
     } catch(e){ console.warn("Apply remote state error:", e); }
   });
 
@@ -184,12 +149,6 @@ const app = initializeApp(firebaseConfig);
       paused: local.paused,
       metric: local.metric,
       altUnit: local.altUnit,
-      missiles: local.missiles || [],
-      splashes: local.splashes || [],
-      radarFail: !!local.radarFail,
-      jammers: local.jammers || null,
-      settings: local.settings || null,
-      time: local.time || null,
       lastWriteBy: currentUID,
       lastUpdate: serverTimestamp()
     };
@@ -1778,6 +1737,105 @@ $$('#pFormations button[data-form]').forEach(btn=>{
       }
     }catch(e){ console.warn('launch tracking error', e); }
   }, 500);
+})();
+/* === END PATCH === */
+</script>
+
+
+<script>
+/* === PATCH: Full missile + radar + jammer realtime sync (launch + update via Firebase) === */
+(function(){
+  if(typeof getDatabase!=='function'||typeof ref!=='function'||typeof set!=='function'||typeof onValue!=='function'){
+    console.warn('Firebase not loaded, sync patch skipped.');
+    return;
+  }
+  const db = getDatabase();
+  const ROOM_ID = (typeof getRoomId==='function') ? getRoomId() : (window.ROOM_ID || 'sala-default');
+  const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
+  let currentUID = window.currentUID || ('U' + Math.random().toString(36).slice(2));
+
+  // --- Wrap launch() to push missile immediately ---
+  const origLaunch = window.launch;
+  if(typeof origLaunch==='function'){
+    window.launch = function(launcherId,targetId,type){
+      const result = origLaunch.apply(this, arguments);
+      try{
+        const L = (window.st.planes||[]).find(p=>p.id===launcherId);
+        const T = (window.st.planes||[]).find(p=>p.id===targetId);
+        const missile = (window.st.missiles||[]).slice(-1)[0]; // last missile
+        if(missile){
+          const payload = {
+            event:'launch',
+            missile: missile,
+            by: currentUID,
+            ts: Date.now()
+          };
+          set(ref(db, `rooms/${ROOM_ID}/events/MS_${missile.id||Date.now()}`), payload);
+        }
+        if(window.scheduleSync) window.scheduleSync();
+      }catch(e){ console.warn('Sync launch fail', e); }
+      return result;
+    };
+  }
+
+  // --- Update missiles, radarFail, jammers into state every 0.3s ---
+  setInterval(()=>{
+    try{
+      const s = window.st || {};
+      const payload = {
+        missiles: s.missiles || [],
+        radarFail: s.radarFail || false,
+        jammers: s.planes ? s.planes.filter(p=>p.jamming).map(p=>p.id) : [],
+        by: currentUID,
+        ts: Date.now()
+      };
+      set(ref(db, `rooms/${ROOM_ID}/dynamic`), payload);
+    }catch(e){}
+  }, 300);
+
+  // --- Listen for remote missiles and recreate them if not present ---
+  onValue(ref(db, `rooms/${ROOM_ID}/dynamic`), (snap)=>{
+    const v = snap.val();
+    if(!v || v.by===currentUID) return;
+    try{
+      // Radar fail sync
+      if(typeof v.radarFail!=='undefined'){
+        window.st.radarFail = v.radarFail;
+      }
+      // Jammers sync
+      (window.st.planes||[]).forEach(p=>{ p.jamming = Array.isArray(v.jammers) && v.jammers.includes(p.id); });
+
+      // Missiles sync
+      if(Array.isArray(v.missiles)){
+        const existing = new Set((window.st.missiles||[]).map(m=>m.id));
+        v.missiles.forEach(m=>{
+          if(!existing.has(m.id)){
+            (window.st.missiles||[]).push(Object.assign({}, m));
+            if(window.showLaunchNotice) window.showLaunchNotice(m);
+          }
+        });
+      }
+    }catch(e){ console.warn('Apply remote missile/radar sync fail', e); }
+  });
+
+  // --- Listen for launch events (redundant safety) ---
+  onValue(ref(db, `rooms/${ROOM_ID}/events`), (snap)=>{
+    const data = snap.val();
+    if(!data) return;
+    Object.entries(data).forEach(([k, evt])=>{
+      if(!evt || evt.by===currentUID) return;
+      if(evt.event==='launch' && evt.missile){
+        const m = evt.missile;
+        const exists = (window.st.missiles||[]).some(x=>x.id===m.id);
+        if(!exists){
+          (window.st.missiles||[]).push(Object.assign({}, m));
+          if(window.showLaunchNotice) window.showLaunchNotice(m);
+        }
+      }
+    });
+  });
+
+  console.log('Realtime missile/radar/jammer sync active.');
 })();
 /* === END PATCH === */
 </script>
