@@ -1157,5 +1157,589 @@ $$('#pFormations button[data-form]').forEach(btn=>{
   setTimeout(()=>scheduleSync(),1500);
 </script>
 
+
+
+<!-- === SETCA Enhancements Patch (Alumno + Emparejamientos + Falla Radar + Pinch Zoom + Título) === -->
+<style>
+  #radarFailOverlay{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background: rgba(0,0,0,0.6); color:#ff4d4d; font: 700 24px monospace; z-index: 50;
+    border: 1px solid rgba(255,77,77,0.6);
+    pointer-events:none;
+  }
+  header .setca-subtitle{ font-size:12px; color:#b6f3b6; margin-top:2px; }
+</style>
+<script>
+(function(){
+  const st = (window.st = window.st || {});
+
+  // Title / Subtitle
+  try{
+    const hdr = document.querySelector('header') || document.body;
+    let title = hdr.querySelector('h1');
+    if (!title){ title = document.createElement('h1'); hdr.prepend(title); }
+    title.textContent = 'SETCA';
+    let sub = hdr.querySelector('.setca-subtitle');
+    if(!sub){ sub = document.createElement('div'); sub.className = 'setca-subtitle'; title.insertAdjacentElement('afterend', sub); }
+    sub.textContent = 'Sistema de Entrenamiento Táctico de Control de Aeronaves';
+  }catch(e){ console.warn('SETCA title patch:', e); }
+
+  // Alumno button
+  try{
+    const hdr = document.querySelector('header') || document.body;
+    let alumnoBtn = document.getElementById('alumnoBtn');
+    if(!alumnoBtn){
+      alumnoBtn = document.createElement('button');
+      alumnoBtn.id = 'alumnoBtn';
+      alumnoBtn.textContent = '🎯 Alumno';
+      hdr.appendChild(alumnoBtn);
+    }
+    const toHide = ['#pCmd','#pPlanes','#pNav','#pFormations','#pDraw'];
+    alumnoBtn.addEventListener('click', ()=>{
+      st.modoAlumno = !st.modoAlumno;
+      toHide.forEach(sel=>{ const el = document.querySelector(sel); if(el){ el.style.display = st.modoAlumno ? 'none' : ''; } });
+      alumnoBtn.classList.toggle('hi', !!st.modoAlumno);
+      (window.repaintPlanesList||function(){})();
+      (window.repaintNav||function(){})();
+      (window.repaintPairs||function(){})();
+      (window.repaintAlt||function(){})();
+    });
+  }catch(e){ console.warn('Alumno button patch:', e); }
+
+  // Names -> pairs
+  try{
+    document.addEventListener('change', (e)=>{
+      const t = e.target;
+      if(!t || !t.id) return;
+      if(t.id.startsWith('nm-')){
+        const pid = t.id.slice(3);
+        if(Array.isArray(st.planes)){
+          const p = st.planes.find(x => x.id === pid || x.name === pid);
+          if(p){ p.name = t.value || p.name; }
+        }
+        (window.repaintPlanesList||function(){})();
+        (window.repaintPairs||function(){})();
+        (window.repaintPairList||function(){})();
+        (window.scheduleSync||function(){})();
+      }
+    }, true);
+  }catch(e){ console.warn('Name->Pairs patch:', e); }
+
+  // Radar fail (sync) + overlay
+  try{
+    const failBtn = document.getElementById('failRadar');
+    if(failBtn){
+      failBtn.addEventListener('click', ()=>{
+        st.radarFailNet = !st.radarFailNet;
+        (window.scheduleSync||function(){})();
+      });
+    }
+    let center = document.getElementById('center') || document.querySelector('main') || document.body;
+    let overlay = document.getElementById('radarFailOverlay');
+    if(!overlay){
+      overlay = document.createElement('div');
+      overlay.id = 'radarFailOverlay';
+      overlay.textContent = 'FALLA DE RADAR (ALUMNO)';
+      center.style.position = center.style.position || 'relative';
+      center.appendChild(overlay);
+    }
+    setInterval(()=>{ overlay.style.display = (st.modoAlumno && st.radarFailNet) ? 'flex' : 'none'; }, 200);
+  }catch(e){ console.warn('Falla Radar overlay patch:', e); }
+
+  // Pinch-zoom -> simulate wheel
+  try{
+    const cvs = document.getElementById('radar');
+    if(cvs){
+      let d0=null, z0=1;
+      function dist(e){const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;return Math.hypot(dx,dy);}
+      cvs.addEventListener('touchstart', (e)=>{ if(e.touches.length===2){ e.preventDefault(); d0 = dist(e); z0 = 1; }}, {passive:false});
+      cvs.addEventListener('touchmove', (e)=>{
+        if(e.touches.length===2 && d0){
+          e.preventDefault();
+          const d = dist(e);
+          const scale = d/d0;
+          const dy = (scale>z0) ? -100 : 100;
+          const midx = (e.touches[0].clientX + e.touches[1].clientX)/2;
+          const midy = (e.touches[0].clientY + e.touches[1].clientY)/2;
+          const evt = new WheelEvent('wheel', {deltaY: dy, clientX: midx, clientY: midy, bubbles: true, cancelable: true});
+          cvs.dispatchEvent(evt);
+          z0 = scale;
+        }
+      }, {passive:false});
+      cvs.addEventListener('touchend', ()=>{ d0=null; z0=1; }, {passive:true});
+    }
+  }catch(e){ console.warn('Pinch-zoom patch:', e); }
+
+  // Missile sync: call scheduleSync after launch
+  try{
+    const origLaunch = window.launch;
+    if(typeof origLaunch === 'function'){
+      window.launch = function(){
+        const r = origLaunch.apply(this, arguments);
+        (window.scheduleSync||function(){})();
+        return r;
+      };
+    }
+  }catch(e){ console.warn('Missile sync patch:', e); }
+
+  // Repaint on remote updates
+  window.addEventListener('setca-remote-update', ()=>{
+    (window.repaintPlanesList||function(){})();
+    (window.repaintNav||function(){})();
+    (window.repaintPairs||function(){})();
+    (window.repaintAlt||function(){})();
+  });
+})();
+</script>
+<!-- === /SETCA Enhancements Patch === -->
+
+
+<script>
+/* === PATCH: sync name changes to planes list & pairs + enrich report tactical data === */
+(function(){
+  function safeCall(fn){ try{ if(typeof fn==='function') fn(); }catch(e){console.warn(e); } }
+
+  document.addEventListener('change', function(e){
+    const t = e.target;
+    if(!t || !t.id) return;
+    if(t.id.startsWith('nm-')){
+      const pid = t.id.slice(3);
+      if(Array.isArray(st.planes)){
+        const p = st.planes.find(x => x.id === pid);
+        if(p){
+          p.name = t.value || p.name;
+          safeCall(repaintPlanesList);
+          safeCall(repaintNav);
+          safeCall(repaintPairs);
+          safeCall(repaintPairList);
+          safeCall(repaintStudent);
+          if(window.scheduleSync) try{ window.scheduleSync(); }catch(e){console.warn(e);}
+        }
+      }
+    }
+  }, true);
+
+  if(typeof renderReport === 'function'){
+    const origRender = renderReport;
+    window.renderReport = function(){
+      origRender();
+      try{
+        const cont = document.getElementById('reportContent');
+        if(!cont) return;
+        const diagnostics = [];
+        const COLLISION_NM = 1.0;
+        st.planes.forEach(p=>{
+          let nearest = null, nde=1e9;
+          st.planes.forEach(q=>{
+            if(p.id===q.id) return;
+            const d = Math.hypot(p.x-q.x, p.y-q.y);
+            if(d < nde){ nde = d; nearest = q; }
+          });
+          if(nearest && nde <= COLLISION_NM){
+            const closing = Math.abs(((p.hdg - nearest.hdg)+540)%360 - 180) > 60 ? 'En cierre' : 'Rumbo similar/contrario';
+            diagnostics.push({
+              type:'collision',
+              text: `RIESGO COLISIÓN: ${p.name} ↔ ${nearest.name} — Distancia ${(nde).toFixed(2)} NM — ${closing}`
+            });
+          }
+        });
+
+        st.missiles.forEach(m=>{
+          const L = st.planes.find(x=>x.id===m.launcher);
+          const T = st.planes.find(x=>x.id===m.tgt);
+          if(L && T){
+            diagnostics.push({type:'launch', text:`LANZAMIENTO: ${L.name} -> ${T.name} (${m.name}). Posición lanz.: X:${L.x.toFixed(1)} Y:${L.y.toFixed(1)} NM`});
+          }
+        });
+
+        st.planes.forEach(p=>{
+          let nearest=null, nde=1e9;
+          st.planes.forEach(q=>{ if(p.id===q.id) return; const d=Math.hypot(p.x-q.x,p.y-q.y); if(d<nde){ nde=d; nearest=q; }});
+          if(nearest && nde < 3.0){
+            const dAlt = nearest.alt - p.alt;
+            let maneuver = '';
+            if(Math.abs(dAlt) < 500) maneuver = 'Subir 500 ft / Descender 500 ft o cambio de rumbo ±20°';
+            else if(dAlt > 500) maneuver = 'Descender 500 ft';
+            else maneuver = 'Subir 500 ft';
+            diagnostics.push({type:'maneuver', text:`MANIOBRA POSIBLE: ${p.name} con ${nearest.name} — Dist ${nde.toFixed(2)} NM — Recomendación: ${maneuver}`});
+          }
+        });
+
+        st.pairs.forEach(pr=>{
+          const A = st.planes.find(x=>x.id===pr.a), B = st.planes.find(x=>x.id===pr.b);
+          if(!A || !B) return;
+          if(pr.dNM && pr.dNM < 1.2){
+            diagnostics.push({type:'pairRisk', text:`EMPAREJAMIENTO RIESGO: ${A.name} ↔ ${B.name} — Dist ${pr.dNM.toFixed(2)} NM — ΔAlt ${pr.dAlt|0} ft`});
+          }
+        });
+
+        const diagHtml = ['<h3>Diagnósticos Tácticos</h3><table><thead><tr><th>Tipo</th><th>Detalle</th></tr></thead><tbody>'];
+        diagnostics.forEach(d=>{ diagHtml.push(`<tr><td>${d.type.toUpperCase()}</td><td>${d.text}</td></tr>`); });
+        if(diagnostics.length===0) diagHtml.push('<tr><td colspan="2">Ningún evento táctico detectado.</td></tr>');
+        diagHtml.push('</tbody></table>');
+        cont.insertAdjacentHTML('beforeend', diagHtml.join(''));
+
+        const counts = diagnostics.reduce((acc,cur)=>{ acc[cur.type]=(acc[cur.type]||0)+1; return acc; }, {});
+        const summary = `<div style="margin-top:6px;padding:8px;border:1px solid #ccc;background:#fff9"><strong>Resumen táctico:</strong> ${Object.entries(counts).map(([k,v])=>`${k}: ${v}`).join(' • ') || 'Sin incidentes'}</div>`;
+        cont.insertAdjacentHTML('afterbegin', summary);
+      }catch(err){ console.warn('Enhanced report failed', err); }
+    };
+  }
+})();
+</script>
+
+<script>
+
+/* === PATCH: missile alerts refined + remove manual click-hit + collision risk at same level === */
+(function(){
+  const COLLISION_HORIZ_NM = 1.2;   // distancia horizontal para riesgo de colisión
+  const COLLISION_ALT_FT   = 500;   // diferencia de altitud para "mismo nivel"
+
+  // --- Eliminar el comportamiento de click-hit manual si fue agregado previamente ---
+  try{
+    if(window.__clickHitHandlerAttached){
+      const cvs = document.getElementById('radar');
+      if(cvs && window.__clickHitHandler){
+        cvs.removeEventListener('click', window.__clickHitHandler, true);
+      }
+      window.__clickHitHandlerAttached = false;
+      window.__clickHitHandler = null;
+    }
+  }catch(e){ /* no-op */ }
+
+  // --- Riesgo de colisión: pares de aviones cerca y mismo nivel ---
+  function computeCollisionRisks(){
+    const planes = st.planes || [];
+    const risks = [];
+    for(let i=0;i<planes.length;i++){
+      for(let j=i+1;j<planes.length;j++){
+        const A = planes[i], B = planes[j];
+        const dNM = Math.hypot((A.x||0)-(B.x||0),(A.y||0)-(B.y||0));
+        const dAlt = Math.abs((A.alt||0)-(B.alt||0));
+        if(dNM <= COLLISION_HORIZ_NM && dAlt <= COLLISION_ALT_FT){
+          risks.push({a:A,b:B,dNM});
+        }
+      }
+    }
+    st.collisionRisks = risks;
+  }
+
+  function drawCollisionAlerts(){
+    if(!st.collisionRisks || !st.collisionRisks.length) return;
+    const t = (performance.now()%1000)/1000;
+    const pulse = 1 + 0.6*Math.sin(t*2*Math.PI);
+    ctx.save();
+    st.collisionRisks.forEach(r=>{
+      const sA = toScreen(r.a.x, r.a.y);
+      const sB = toScreen(r.b.x, r.b.y);
+      const midX = (sA.x + sB.x)/2, midY = (sA.y + sB.y)/2;
+      const rpx = Math.max(18, 12*pulse);
+      ctx.strokeStyle = 'rgba(255,77,77,0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sA.x, sA.y, rpx, 0, 2*Math.PI); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sB.x, sB.y, rpx, 0, 2*Math.PI); ctx.stroke();
+      ctx.setLineDash([6,4]);
+      ctx.strokeStyle='rgba(255,120,120,0.85)';
+      ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ff4d4d'; ctx.font = 'bold 12px monospace'; ctx.textAlign='center';
+      ctx.fillText('RIESGO COLISIÓN', midX, midY - 12);
+      ctx.fillStyle = '#ffe066'; ctx.font='11px monospace';
+      ctx.fillText(`${r.a.name} ↔ ${r.b.name} — ${r.dNM.toFixed(2)} NM`, midX, midY + 6);
+    });
+    ctx.restore();
+  }
+
+  // Integrar el overlay de colisiones después de dibujar misiles (o al final del frame)
+  if(typeof window.drawMissiles === 'function'){
+    const __origDrawMissiles = window.drawMissiles;
+    window.drawMissiles = function(){
+      __origDrawMissiles();
+      try{ computeCollisionRisks(); drawCollisionAlerts(); }catch(e){}
+    };
+  }
+
+  // --- Mejorar alertas de misiles (origen→destino + distancia restante) ---
+  function refreshMissilePanel(){
+    const panel = document.getElementById('missileAlerts');
+    if(!panel) return;
+    panel.innerHTML = '';
+    const missiles = st.missiles || [];
+    if(!missiles.length){
+      const d=document.createElement('div');
+      d.className='card';
+      d.textContent='No hay misiles en vuelo.';
+      panel.appendChild(d);
+      return;
+    }
+    missiles.forEach(m=>{
+      if(m.status && m.status!=='fly') return;
+      const L = (st.planes||[]).find(p=>p.id===m.launcher) || {name: m.launcher, x:m.x, y:m.y};
+      const T = (st.planes||[]).find(p=>p.id===m.tgt) || {name: m.tgt, x:m.tx||m.x, y:m.ty||m.y};
+      const distNM = Math.hypot((T.x||0)-(m.x||0), (T.y||0)-(m.y||0));
+      const card=document.createElement('div');
+      card.className='card';
+      card.style.background='rgba(20,0,0,0.6)';
+      card.style.borderColor='#b00';
+      card.style.color='#ffe066';
+      card.innerHTML = `<strong>!! MISIL ENTRANTE !!</strong><br>
+        Origen: <strong>${L.name}</strong> → Destino: <strong>${T.name}</strong><br>
+        Tipo: ${m.name || m.type || 'N/A'} • Distancia restante: <strong>${distNM.toFixed(2)} NM</strong>`;
+      panel.appendChild(card);
+    });
+  }
+
+  // Hook sobre paintAlerts si existe, manteniendo compatibilidad
+  if(typeof window.paintAlerts === 'function'){
+    const __origPaint = window.paintAlerts;
+    window.paintAlerts = function(){
+      try{ refreshMissilePanel(); }catch(e){}
+      try{ __origPaint(); }catch(e){}
+    };
+  }
+  // Render periódico
+  setInterval(()=>{ try{ refreshMissilePanel(); }catch(e){} }, 800);
+
+  // --- Extender reporte si existe ---
+  if(typeof window.renderReport === 'function'){
+    const __origReport = window.renderReport;
+    window.renderReport = function(){
+      __origReport();
+      try{
+        const cont = document.getElementById('reportContent');
+        if(!cont) return;
+        let html = '<h3>Misiles activos (detalle)</h3><table><thead><tr><th>Id</th><th>Tipo</th><th>Origen</th><th>Destino</th><th>Dist rest (NM)</th></tr></thead><tbody>';
+        (st.missiles||[]).forEach(m=>{
+          const L = (st.planes||[]).find(p=>p.id===m.launcher) || {name:m.launcher,x:m.x,y:m.y};
+          const T = (st.planes||[]).find(p=>p.id===m.tgt) || {name:m.tgt,x:m.x,y:m.y};
+          const distNM = Math.hypot((T.x||0)-(m.x||0),(T.y||0)-(m.y||0));
+          html += `<tr><td>${m.id||''}</td><td>${m.name||m.type||''}</td><td>${L.name||''}</td><td>${T.name||''}</td><td>${distNM.toFixed(2)}</td></tr>`;
+        });
+        if(!(st.missiles||[]).length) html += '<tr><td colspan="5">Ninguno</td></tr>';
+        html += '</tbody></table>';
+        cont.insertAdjacentHTML('beforeend', html);
+      }catch(e){}
+    };
+  }
+
+})(); 
+/* === END PATCH === */
+
+</script>
+
+<script>
+/* === HOTFIX: Botones intactos + AltPanel mejorado + eliminar Misiles Entrantes (sin tocar DOM base) === */
+(function(){
+  const COLLISION_HORIZ_NM = 4.86;  // ~9 km
+  const COLLISION_ALT_FT   = 1000;  // ±1000 ft
+
+  // 1) Eliminar panel "Misiles Entrantes" sin romper el DOM (runtime)
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const alerts = document.getElementById('pAlerts');
+    if (alerts && alerts.parentElement) {
+      alerts.parentElement.removeChild(alerts);
+    }
+  });
+
+  // 2) Sincronización de nombres entre NAV y ALT
+  document.addEventListener('change', function(e){
+    const t = e.target;
+    if(!t) return;
+    // desde NAV (inputs id="nm-<id>")
+    if(t.id && t.id.startsWith('nm-')){
+      const pid = t.id.slice(3);
+      const p = (window.st.planes||[]).find(x=>x.id===pid);
+      if(p){ p.name = t.value || p.name; safeRepaints(); }
+    }
+    // desde ALT (inputs .alt-name con data-id)
+    if(t.classList && t.classList.contains('alt-name')){
+      const pid = t.dataset.id;
+      const p = (window.st.planes||[]).find(x=>x.id===pid);
+      if(p){ p.name = t.value || p.name; safeRepaints(); }
+    }
+  }, true);
+
+  function safeRepaints(){
+    try{ window.repaintPlanesList && window.repaintPlanesList(); }catch(e){}
+    try{ window.repaintNav && window.repaintNav(); }catch(e){}
+    try{ window.repaintAlt && window.repaintAlt(); }catch(e){}
+    try{ window.repaintPairs && window.repaintPairs(); }catch(e){}
+    try{ window.repaintStudent && window.repaintStudent(); }catch(e){}
+    try{ window.scheduleSync && window.scheduleSync(); }catch(e){}
+  }
+
+  // 3) Extender repaintAlt SIN romperlo ni bloquear botones
+  if(typeof window.repaintAlt === 'function'){
+    const __origAlt = window.repaintAlt;
+    window.repaintAlt = function(){
+      __origAlt();
+      try{
+        const list = document.getElementById('altList');
+        if(!list) return;
+        const planes = (window.st.planes||[]).slice().sort((a,b)=>b.alt-a.alt);
+
+        // Asegurar inputs de nombre en cada fila y marcar peligros de colisión
+        const rows = Array.from(list.querySelectorAll('.row'));
+        // Crear índice por nombre para localizar fila de cada avión
+        const rowByName = new Map();
+        rows.forEach(row=>{
+          const pill = row.querySelector('.pill');
+          if(pill) rowByName.set(pill.textContent.trim(), row);
+        });
+
+        // Añadir input nombre si no existe y asociar data-id
+        rows.forEach(row=>{
+          const pill = row.querySelector('.pill');
+          if(!pill) return;
+          // Si ya agregamos un input de nombre, no repetir
+          if(!row.querySelector('input.alt-name')){
+            const pid = (planes.find(p=>p.name===pill.textContent.trim())||{}).id;
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.value = pill.textContent.trim();
+            nameInput.dataset.id = pid || '';
+            nameInput.className = 'ghost alt-name';
+            nameInput.style.width = '120px';
+            nameInput.style.marginRight = '6px';
+            // Insertar antes del pill
+            row.insertBefore(nameInput, pill);
+          } else {
+            // Mantener sincronizado el valor si ya existe
+            const pid = row.querySelector('input.alt-name')?.dataset.id;
+            const p = (window.st.planes||[]).find(x=>x.id===pid);
+            if(p){ row.querySelector('input.alt-name').value = p.name; pill.textContent = p.name; }
+          }
+        });
+
+        // Limpiar estilos previos
+        rows.forEach(row=>{
+          row.style.color = '';
+          const pill = row.querySelector('.pill');
+          if(pill){
+            // quitar etiqueta de peligro si la tuviera
+            pill.textContent = pill.textContent.replace(/\s*⚠️\s*PELIGRO DE COLISIÓN\s*$/,'').trim();
+          }
+        });
+
+        // Evaluar riesgo y marcar fijo en rojo
+        for(let i=0;i<planes.length;i++){
+          for(let j=i+1;j<planes.length;j++){
+            const A=planes[i], B=planes[j];
+            const dNM=Math.hypot((A.x||0)-(B.x||0),(A.y||0)-(B.y||0));
+            const dAlt=Math.abs((A.alt||0)-(B.alt||0));
+            if(dNM<=COLLISION_HORIZ_NM && dAlt<=COLLISION_ALT_FT){
+              const rowA = rowByName.get(A.name);
+              const rowB = rowByName.get(B.name);
+              if(rowA){
+                rowA.style.color = '#ff4d4d';
+                const pillA = rowA.querySelector('.pill');
+                if(pillA && !/PELIGRO DE COLISIÓN/.test(pillA.textContent)){
+                  pillA.textContent = `${A.name} ⚠️ PELIGRO DE COLISIÓN`;
+                }
+              }
+              if(rowB){
+                rowB.style.color = '#ff4d4d';
+                const pillB = rowB.querySelector('.pill');
+                if(pillB && !/PELIGRO DE COLISIÓN/.test(pillB.textContent)){
+                  pillB.textContent = `${B.name} ⚠️ PELIGRO DE COLISIÓN`;
+                }
+              }
+            }
+          }
+        }
+      }catch(e){ console.warn('repaintAlt extension failed', e); }
+    };
+  }
+
+  // 4) Mantener X en impacto y rótulo de misil entrante ya existentes: no tocamos drawMissiles ni drawPlane
+
+})();
+/* === /HOTFIX === */
+</script>
+
+
+<script>
+/* === PATCH: Aviso persistente de MISIL LANZADO hasta impacto === */
+(function(){
+  const activeLaunches = new Map();
+
+  function showLaunchNotice(m){
+    const id = m.id || `${m.launcher}-${m.tgt}`;
+    if(activeLaunches.has(id)) return;
+
+    const L = (st.planes||[]).find(p=>p.id===m.launcher);
+    const T = (st.planes||[]).find(p=>p.id===m.tgt);
+    const txt = `MISIL LANZADO: ${L?L.name:m.launcher} → ${T?T.name:m.tgt} (${m.name||'Desconocido'})`;
+
+    // Crear aviso en radar (HUD superior)
+    const div = document.createElement('div');
+    div.className = 'launchNotice';
+    div.style.position = 'absolute';
+    div.style.right = '20px';
+    div.style.top = `${20 + activeLaunches.size*28}px`;
+    div.style.zIndex = '9999';
+    div.style.fontFamily = 'monospace';
+    div.style.fontSize = '14px';
+    div.style.color = '#ffa500';
+    div.style.background = 'rgba(0,0,0,0.5)';
+    div.style.border = '1px solid #ffa500';
+    div.style.borderRadius = '4px';
+    div.style.padding = '3px 8px';
+    div.textContent = txt;
+    document.body.appendChild(div);
+
+    // Crear aviso en panel derecho si existe
+    const panel = document.getElementById('missileAlerts') || document.querySelector('#rightPanel, #alertsPanel, .right-panel');
+    let panelDiv = null;
+    if(panel){
+      panelDiv = document.createElement('div');
+      panelDiv.className = 'card launchCard';
+      panelDiv.style.background = 'rgba(255,140,0,0.15)';
+      panelDiv.style.border = '1px solid #ffa500';
+      panelDiv.style.color = '#ffa500';
+      panelDiv.style.marginBottom = '4px';
+      panelDiv.textContent = txt;
+      panel.prepend(panelDiv);
+    }
+
+    activeLaunches.set(id, {div, panelDiv});
+  }
+
+  function removeLaunchNotice(m){
+    const id = m.id || `${m.launcher}-${m.tgt}`;
+    const entry = activeLaunches.get(id);
+    if(!entry) return;
+    if(entry.div && entry.div.parentNode) entry.div.parentNode.removeChild(entry.div);
+    if(entry.panelDiv && entry.panelDiv.parentNode) entry.panelDiv.parentNode.removeChild(entry.panelDiv);
+    activeLaunches.delete(id);
+  }
+
+  // Detectar cambios en st.missiles
+  setInterval(()=>{
+    try{
+      const missiles = st.missiles || [];
+      const idsNow = new Set(missiles.map(m=>m.id || `${m.launcher}-${m.tgt}`));
+
+      // Nuevos lanzamientos
+      missiles.forEach(m=>{
+        const id = m.id || `${m.launcher}-${m.tgt}`;
+        if(!activeLaunches.has(id)){
+          showLaunchNotice(m);
+        }
+      });
+
+      // Misiles eliminados o impactados
+      for(const [id, data] of activeLaunches.entries()){
+        const m = missiles.find(x=>(x.id||`${x.launcher}-${x.tgt}`)===id);
+        if(!m || m.status==='hit' || m.status==='exploded'){
+          removeLaunchNotice({id});
+        }
+      }
+    }catch(e){ console.warn('launch tracking error', e); }
+  }, 500);
+})();
+/* === END PATCH === */
+</script>
+
 </body>
 </html>
