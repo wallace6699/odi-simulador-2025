@@ -1741,5 +1741,73 @@ $$('#pFormations button[data-form]').forEach(btn=>{
 /* === END PATCH === */
 </script>
 
+
+<script>
+/* === PATCH: Sincronización en red de eventos visuales (misil lanzado / impacto) === */
+(function(){
+  if(typeof getDatabase !== 'function' || typeof ref !== 'function') return;
+  try{
+    const db = getDatabase();
+    const ROOM_ID = (typeof getRoomId === 'function') ? getRoomId() : 'sala-default';
+    const eventsRef = ref(db, `rooms/${ROOM_ID}/events`);
+
+    // === Función auxiliar para enviar evento ===
+    async function sendEvent(evt){
+      try{
+        const id = evt.id || ('E' + Date.now());
+        await set(ref(db, `rooms/${ROOM_ID}/events/${id}`), Object.assign(evt, {
+          t: Date.now(),
+          by: (window.currentUID || null)
+        }));
+      }catch(e){ console.warn('sendEvent fail', e); }
+    }
+
+    // === Hook en lanzamiento de misil ===
+    const origLaunch = window.launch;
+    if(typeof origLaunch === 'function'){
+      window.launch = function(launcherId, targetId, type){
+        const L = (st.planes||[]).find(p=>p.id===launcherId);
+        const T = (st.planes||[]).find(p=>p.id===targetId);
+        const missile={id:'MS'+Date.now(),launcher:launcherId,tgt:targetId,name:type||'N/A'};
+        sendEvent({ type:'launch', ...missile, Lname:L?L.name:launcherId, Tname:T?T.name:targetId });
+        return origLaunch.apply(this, arguments);
+      };
+    }
+
+    // === Hook en actualización de misiles (impacto) ===
+    const origUpdateMissiles = window.updateMissiles;
+    if(typeof origUpdateMissiles === 'function'){
+      window.updateMissiles = function(dt){
+        const before = new Set(st.missiles.map(m=>m.id));
+        origUpdateMissiles(dt);
+        const after = new Set(st.missiles.map(m=>m.id));
+        before.forEach(id=>{
+          if(!after.has(id)){
+            sendEvent({ type:'hit', id });
+          }
+        });
+      };
+    }
+
+    // === Escucha remota de eventos ===
+    onValue(ref(db, `rooms/${ROOM_ID}/events`), (snap)=>{
+      const data = snap.val();
+      if(!data) return;
+      Object.entries(data).forEach(([id, evt])=>{
+        if(evt.by && evt.by===window.currentUID) return; // ignorar propios
+        if(evt.type==='launch'){
+          const fakeMissile = { id: evt.id, launcher: evt.launcher, tgt: evt.tgt, name: evt.name };
+          if(window.showLaunchNotice) window.showLaunchNotice(fakeMissile);
+        }
+        if(evt.type==='hit'){
+          if(window.removeLaunchNotice) window.removeLaunchNotice({id:evt.id});
+        }
+      });
+    });
+  }catch(e){ console.warn('Network visual sync error', e); }
+})();
+/* === END PATCH === */
+</script>
+
 </body>
 </html>
