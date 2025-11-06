@@ -44,6 +44,7 @@
 
   async function pushStateToCloud(local) {
     if (!local) return;
+    // Include dynamic runtime elements so other clients render exactly the same
     const payload = {
       planes: local.planes,
       roles: local.roles,
@@ -53,6 +54,12 @@
       paused: local.paused,
       metric: local.metric,
       altUnit: local.altUnit,
+      missiles: local.missiles || [],
+      splashes: local.splashes || [],
+      radarFail: !!local.radarFail,
+      jammers: local.jammers || null,
+      settings: local.settings || null,
+      time: local.time || null,
       lastWriteBy: currentUID,
       lastUpdate: serverTimestamp()
     };
@@ -73,11 +80,39 @@
       if (typeof v.metric === "boolean") st.metric = v.metric;
       if (v.altUnit) st.altUnit = v.altUnit;
 
+      // Dynamic runtime fields
+      if (Array.isArray(v.missiles)) {
+        // preserve previous missile ids to show/remove notices
+        const prev = new Set((st.missiles||[]).map(m=>m.id));
+        st.missiles = v.missiles;
+        // show notices for newly appeared missiles
+        st.missiles.forEach(m=>{ if(!prev.has(m.id) && window.showLaunchNotice) window.showLaunchNotice(m); });
+      }
+      if (Array.isArray(v.splashes)) st.splashes = v.splashes;
+      if (typeof v.radarFail !== 'undefined') st.radarFail = !!v.radarFail;
+      if (v.jammers) st.jammers = v.jammers;
+      if (v.settings) st.settings = v.settings;
+      if (v.time) st.time = v.time;
+
+      // Remove notices for missiles that disappeared
+      if (Array.isArray(v.missiles)) {
+        const nowIds = new Set((v.missiles||[]).map(m=>m.id));
+        (Array.from(document.querySelectorAll('[id^="ln-"]'))||[]).forEach(node=>{
+          const nid = node.id.replace(/^ln-/, '');
+          if(!nowIds.has(nid) && window.removeLaunchNotice) window.removeLaunchNotice({id:nid});
+        });
+      }
+
       repaintPlanesList && repaintPlanesList();
       repaintNav && repaintNav();
       repaintAlt && repaintAlt();
       repaintPairs && repaintPairs();
       repaintStudent && repaintStudent();
+
+      // ensure visual drawing functions run after applying remote state
+      try{ drawMissiles && drawMissiles(); }catch(e){}
+      try{ updateMissiles && (function(){ /* allow updateMissiles to run in next frame */ })(); }catch(e){}
+
     } catch(e){ console.warn("Apply remote state error:", e); }
   });
 
@@ -149,6 +184,12 @@ const app = initializeApp(firebaseConfig);
       paused: local.paused,
       metric: local.metric,
       altUnit: local.altUnit,
+      missiles: local.missiles || [],
+      splashes: local.splashes || [],
+      radarFail: !!local.radarFail,
+      jammers: local.jammers || null,
+      settings: local.settings || null,
+      time: local.time || null,
       lastWriteBy: currentUID,
       lastUpdate: serverTimestamp()
     };
@@ -1739,170 +1780,6 @@ $$('#pFormations button[data-form]').forEach(btn=>{
   }, 500);
 })();
 /* === END PATCH === */
-</script>
-
-
-<script>
-/* === REALTIME SYNC (Modo Libre): sincroniza TODO el estado entre clientes (planes, misiles, fallas, jammer, giros) === */
-(function(){
-  // Requiere Firebase v9 modular ya cargado en el proyecto
-  if (typeof getDatabase !== 'function' || typeof ref !== 'function' || typeof set !== 'function' || typeof onValue !== 'function') {
-    console.warn('Realtime Sync: Firebase v9 no disponible; se omite parche.');
-    return;
-  }
-
-  // --- Identidad del cliente ---
-  try{
-    if(!window.currentUID){
-      window.currentUID = localStorage.getItem('sim_uid') || ('U' + Math.random().toString(36).slice(2));
-      localStorage.setItem('sim_uid', window.currentUID);
-    }
-  }catch(e){ window.currentUID = 'U' + Math.random().toString(36).slice(2); }
-
-  // --- Sala / Room ---
-  const db = getDatabase();
-  const ROOM_ID = (typeof getRoomId === 'function') ? getRoomId() : (window.ROOM_ID || 'sala-default');
-  const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
-
-  // --- Utilidades de repintado seguro (no rompe botones) ---
-  function safeRepaints(){
-    try{ window.repaintPlanesList && window.repaintPlanesList(); }catch(e){}
-    try{ window.repaintNav && window.repaintNav(); }catch(e){}
-    try{ window.repaintAlt && window.repaintAlt(); }catch(e){}
-    try{ window.repaintPairs && window.repaintPairs(); }catch(e){}
-    try{ window.repaintStudent && window.repaintStudent(); }catch(e){}
-    try{ window.draw && window.draw(); }catch(e){}
-    try{ window.drawMissiles && window.drawMissiles(); }catch(e){}
-    try{ window.scheduleSync && window.scheduleSync(); }catch(e){}
-  }
-
-  // --- Snapshot minimal del estado a sincronizar (liviano) ---
-  function slimState(){
-    const src = window.st || {};
-    return {
-      planes: Array.isArray(src.planes) ? src.planes.map(p=>({
-        id:p.id, name:p.name, x:p.x, y:p.y, hdg:p.hdg, spd:p.spd, alt:p.alt, jam:p.jam, radFail:p.radFail
-      })) : [],
-      missiles: Array.isArray(src.missiles) ? src.missiles.map(m=>({
-        id:m.id, name:m.name, launcher:m.launcher, tgt:m.tgt, x:m.x, y:m.y, spd:m.spd, status:m.status
-      })) : [],
-      drawings: src.drawings || null,
-      settings: src.settings || null,
-      time: src.time || null,
-      extra: {
-        // Campos opcionales que algunos módulos usan
-        jammers: src.jammers || null,
-        radarFaults: src.radarFaults || null
-      }
-    };
-  }
-
-  // --- Notificador de lanzamiento/impacto si no existen helpers previos ---
-  if (typeof window.showLaunchNotice !== 'function'){
-    window.showLaunchNotice = function(m){
-      const L = (st.planes||[]).find(p=>p.id===m.launcher);
-      const T = (st.planes||[]).find(p=>p.id===m.tgt);
-      const txt = `MISIL LANZADO: ${L?L.name:m.launcher} → ${T?T.name:m.tgt} (${m.name||'N/A'})`;
-      let wrap = document.getElementById('launchHud');
-      if(!wrap){
-        wrap = document.createElement('div');
-        wrap.id = 'launchHud';
-        wrap.style.position = 'absolute';
-        wrap.style.right = '16px'; wrap.style.top = '16px';
-        wrap.style.zIndex = '9999'; wrap.style.fontFamily='monospace';
-        document.body.appendChild(wrap);
-      }
-      let node = document.getElementById('ln-'+m.id);
-      if(!node){
-        node = document.createElement('div');
-        node.id = 'ln-'+m.id;
-        node.style.color = '#ffa500';
-        node.style.background = 'rgba(0,0,0,0.5)';
-        node.style.border = '1px solid #ffa500';
-        node.style.borderRadius = '4px';
-        node.style.marginBottom = '6px';
-        node.style.padding = '4px 8px';
-        node.textContent = txt;
-        wrap.appendChild(node);
-      } else {
-        node.textContent = txt;
-      }
-      // También en panel derecho si existe
-      const right = document.getElementById('missileAlerts') || document.querySelector('#rightPanel, #alertsPanel, .right-panel');
-      if(right){
-        let card = right.querySelector(`#lc-${m.id}`);
-        if(!card){
-          card = document.createElement('div');
-          card.id = `lc-${m.id}`;
-          card.className = 'card';
-          card.style.background='rgba(255,140,0,0.15)';
-          card.style.border='1px solid #ffa500';
-          card.style.color='#ffa500';
-          card.style.marginBottom='4px';
-          right.prepend(card);
-        }
-        card.textContent = txt;
-      }
-    };
-  }
-  if (typeof window.removeLaunchNotice !== 'function'){
-    window.removeLaunchNotice = function(m){
-      const id = (m && m.id) ? m.id : null;
-      if(!id) return;
-      const hud = document.getElementById('ln-'+id);
-      if(hud && hud.parentNode) hud.parentNode.removeChild(hud);
-      const right = document.querySelector(`#lc-${id}`);
-      if(right && right.parentNode) right.parentNode.removeChild(right);
-    };
-  }
-
-  // --- Envío periódico (200 ms) con protección anti-bucle por hash ---
-  let lastHashSent = '';
-  setInterval(async ()=>{
-    try{
-      const state = slimState();
-      const hash = JSON.stringify(state);
-      if(hash === lastHashSent) return;
-      lastHashSent = hash;
-      await set(stateRef, { by: window.currentUID, ts: Date.now(), state });
-    }catch(e){ /* noop */ }
-  }, 200);
-
-  // --- Recepción y aplicación de estado remoto ---
-  let lastMissileIds = new Set();
-  onValue(stateRef, (snap)=>{
-    const data = snap.val();
-    if(!data || !data.state) return;
-    if(data.by === window.currentUID) return; // ignorar cambios propios
-
-    const remote = data.state;
-    const loc = window.st = window.st || {};
-    // Reemplazar estructuras principales
-    loc.planes = Array.isArray(remote.planes) ? remote.planes : [];
-    loc.missiles = Array.isArray(remote.missiles) ? remote.missiles : [];
-    if(remote.drawings !== undefined) loc.drawings = remote.drawings;
-    if(remote.settings !== undefined) loc.settings = remote.settings;
-    if(remote.time !== undefined) loc.time = remote.time;
-    if(remote.extra){
-      if(remote.extra.jammers !== undefined) loc.jammers = remote.extra.jammers;
-      if(remote.extra.radarFaults !== undefined) loc.radarFaults = remote.extra.radarFaults;
-    }
-
-    // Detectar nuevos misiles para mostrar aviso "MISIL LANZADO" (persistente hasta desaparecer)
-    const nowIds = new Set(loc.missiles.map(m=>m.id));
-    loc.missiles.forEach(m=>{
-      if(!lastMissileIds.has(m.id)) window.showLaunchNotice && window.showLaunchNotice(m);
-    });
-    // Quitar avisos de misiles desaparecidos / impactados
-    lastMissileIds.forEach(id=>{
-      if(!nowIds.has(id)) window.removeLaunchNotice && window.removeLaunchNotice({id});
-    });
-    lastMissileIds = nowIds;
-
-    safeRepaints();
-  });
-})();
-/* === /REALTIME SYNC (Modo Libre) === */
 </script>
 
 </body>
