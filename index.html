@@ -280,6 +280,14 @@ const app = initializeApp(firebaseConfig);
   .panel-header h3{font-size:13px;}
   button,.btn,input,select{font-size:11px;padding:5px 6px;}
 }
+
+@media (max-width: 900px) {
+  #main { display: block !important; }
+  #left, #right { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  #radarBox { width: 100% !important; height: auto !important; }
+  canvas#radar { width: 100% !important; height: auto !important; }
+}
+
 </style>
 </head>
 <body>
@@ -1999,6 +2007,72 @@ Escribe el ID exactamente tal cual aparece:');
   // Fallback rebinder (in case other code rebinds later)
   setTimeout(bind, 800);
   setTimeout(bind, 2000);
+})();
+</script>
+
+
+<div id="deleteDrawingModal" style="position:fixed;top:0;left:0;width:100%;height:100%;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,0.6);z-index:99999;">
+  <div style="background:#0b160e;padding:16px;border:1px solid #2a5;border-radius:10px;color:#eaffea;min-width:260px;">
+    <h3 style="margin-top:0;margin-bottom:10px;">Eliminar gráfico</h3>
+    <select id="deleteDrawingSelect" class="ghost focusable" style="width:100%;margin-bottom:12px;"></select>
+    <button id="confirmDeleteDrawing" class="btn mini focusable">Eliminar</button>
+    <button id="cancelDeleteDrawing" class="btn mini focusable" style="margin-left:8px;">Cancelar</button>
+  </div>
+</div>
+
+
+<script>
+(function setupDeleteDrawing(){
+  function bind(){
+    const btn = document.getElementById('delDraw');
+    const modal = document.getElementById('deleteDrawingModal');
+    const sel = document.getElementById('deleteDrawingSelect');
+    const ok = document.getElementById('confirmDeleteDrawing');
+    const cancel = document.getElementById('cancelDeleteDrawing');
+    if(!btn || !modal || !sel || !ok || !cancel) return false;
+
+    btn.replaceWith(btn.cloneNode(true));
+    const newBtn = document.getElementById('delDraw');
+
+    newBtn.addEventListener('click', ()=>{
+      sel.innerHTML = '';
+      if(window.st && Array.isArray(st.drawings)){
+        st.drawings.forEach((d,i)=>{
+          const opt = document.createElement('option');
+          opt.value = i;
+          opt.textContent = (d.name||("Gráfico "+(i+1)));
+          sel.appendChild(opt);
+        });
+      }
+      modal.style.display='flex';
+    });
+
+    ok.replaceWith(ok.cloneNode(true));
+    cancel.replaceWith(cancel.cloneNode(true));
+    const ok2 = document.getElementById('confirmDeleteDrawing');
+    const cancel2 = document.getElementById('cancelDeleteDrawing');
+
+    ok2.addEventListener('click', ()=>{
+      const idx = parseInt(sel.value);
+      if(!isNaN(idx) && window.st && Array.isArray(st.drawings)){
+        st.drawings.splice(idx,1);
+        if(typeof repaintNav==='function') repaintNav();
+        if(typeof repaintAlt==='function') repaintAlt();
+        if(typeof repaintPairs==='function') repaintPairs();
+        if(window._SETCA_SYNC && typeof window._SETCA_SYNC.push==='function'){ window._SETCA_SYNC.push(); }
+      }
+      modal.style.display='none';
+    });
+    cancel2.addEventListener('click', ()=>{ modal.style.display='none'; });
+    modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.style.display='none'; });
+    return true;
+  }
+
+  if(document.readyState==='complete' || document.readyState==='interactive'){ bind(); }
+  else { document.addEventListener('DOMContentLoaded', bind, {once:true}); }
+
+  setTimeout(bind,800);
+  setTimeout(bind,2000);
 })();
 </script>
 
