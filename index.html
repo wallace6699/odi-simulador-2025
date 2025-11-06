@@ -296,6 +296,22 @@ const app = initializeApp(firebaseConfig);
   canvas#radar { width:100% !important; height:auto !important; }
 }
 
+
+@media (max-width: 768px) {
+  #center {
+    height: 100vh !important;
+    width: 100vw !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  canvas#radar {
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+
 </style>
 </head>
 <body>
