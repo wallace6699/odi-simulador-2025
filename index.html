@@ -3,9 +3,30 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>SETCA</title>
+<title>SETCA-PERÚ — Vista Única (PRO v5)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+
+
+
+// delLast old handler removed
+document.getElementById('confirmDelete').onclick = ()=>{
+  const id = document.getElementById('deleteSelect').value;
+  if(id && st && st.planes){
+    st.planes = st.planes.filter(p=>p.id!==id);
+    if(st.sel) st.sel = st.sel.filter(x=>x!==id);
+    repaintPlanesList && repaintPlanesList();
+    repaintNav && repaintNav();
+    repaintAlt && repaintAlt();
+    repaintPairs && repaintPairs();
+  }
+  document.getElementById('deleteModal').style.display='none';
+};
+document.getElementById('cancelDelete').onclick = ()=>{
+  document.getElementById('deleteModal').style.display='none';
+};
+
+</script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
@@ -50,10 +71,10 @@
       drawings: local.drawings,
       pairs: local.pairs,
       mode: local.mode,
-      paused: local.paused,
       metric: local.metric,
       altUnit: local.altUnit,
       lastWriteBy: currentUID,
+      missiles: local.missiles,
       lastUpdate: serverTimestamp()
     };
     await set(stateRef, payload);
@@ -68,10 +89,9 @@
       if (v.roles) st.roles = v.roles;
       if (v.pairs) st.pairs = v.pairs;
       if (v.drawings) st.drawings = v.drawings;
-      if (v.mode) st.mode = v.mode;
-      if (typeof v.paused === "boolean") st.paused = v.paused;
-      if (typeof v.metric === "boolean") st.metric = v.metric;
+      if (v.mode) st.mode = v.mode;if (typeof v.metric === "boolean") st.metric = v.metric;
       if (v.altUnit) st.altUnit = v.altUnit;
+      if (v.missiles) st.missiles = v.missiles;
 
       repaintPlanesList && repaintPlanesList();
       repaintNav && repaintNav();
@@ -146,10 +166,10 @@ const app = initializeApp(firebaseConfig);
       drawings: local.drawings,
       pairs: local.pairs,
       mode: local.mode,
-      paused: local.paused,
       metric: local.metric,
       altUnit: local.altUnit,
       lastWriteBy: currentUID,
+      missiles: local.missiles,
       lastUpdate: serverTimestamp()
     };
     await set(stateRef, payload);
@@ -238,7 +258,7 @@ const app = initializeApp(firebaseConfig);
     "top"
     "left"
     "center";}
-  #right {display:none;}
+  #right {display:block;}
   header{flex-wrap:wrap;gap:6px;justify-content:center;text-align:center;}
 }
 @media (max-width: 768px) {
@@ -261,34 +281,96 @@ const app = initializeApp(firebaseConfig);
   button,.btn,input,select{font-size:11px;padding:5px 6px;}
 }
 
-/* ==== RESPONSIVE LÍQUIDO — NO CAMBIA DISEÑO, SOLO SE ADAPTA ==== */
-:root { --pad: 8px; }
-* { box-sizing: border-box; }
-html, body { width:100%; height:100%; overflow:auto; }
-#left, #center, #right { min-width:0 !important; max-width:100% !important; }
-#left, #right { overflow:auto; }
-#center { display:block; width:100%; }
-
-/* Canvas fluido por defecto */
-#center #radar { width:100% !important; height:auto !important; display:block; }
-
-/* Breakpoint grande: mantiene layout pero permite wrap si el contenedor se achica */
-@media (max-width: 1400px) {
-  #left, #right { flex: 1 1 320px !important; }
-  #center { flex: 2 1 520px !important; }
-}
-
-/* Breakpoint medio: dos columnas si cabe, si no, cae a una */
-@media (max-width: 1100px) {
-  #left, #center, #right { width:100% !important; }
-}
-
-/* Breakpoint móvil: una sola columna 100% y radar cuadrado a pantalla */
 @media (max-width: 900px) {
-  body { padding:0 !important; margin:0 !important; }
-  #left, #center, #right { width:100% !important; margin:0 !important; padding-left: var(--pad); padding-right: var(--pad); }
-  #center { padding-left: 0; padding-right: 0; }
-  #center #radar { width:100vw !important; height:100vw !important; }
+  #main { display: block !important; }
+  #left, #right { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  #radarBox { width: 100% !important; height: auto !important; }
+  canvas#radar { width: 100% !important; height: auto !important; }
+}
+
+
+@media (max-width: 1024px) {
+  #main { display:flex !important; flex-direction:column !important; }
+  #left, #right { width:100% !important; max-width:100% !important; }
+  #radarBox { width:100% !important; }
+  canvas#radar { width:100% !important; height:auto !important; }
+}
+
+
+/* === FLUID RESPONSIVE FIX === */
+body{overflow:auto!important;}
+.app{height:auto!important;min-height:100vh!important;}
+#center{height:auto!important;min-height:50vh!important;}
+canvas#radar{width:100%!important;height:auto!important;max-width:100vw!important;}
+
+
+/* === RESPONSIVE FULL ADAPTATION (NO FEATURES CHANGED) === */
+:root { --pad: 6px; }
+* { box-sizing: border-box; }
+
+/* Allow scroll and fluid scaling */
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: auto !important;
+}
+
+/* Main layout adapts to width */
+.app {
+  display: grid;
+  grid-template-columns: 300px 1fr 340px;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "top top top"
+    "left center right";
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  min-height: 100vh;
+}
+
+/* Medium screens: stack right panel below left */
+@media (max-width: 1200px) {
+  .app {
+    grid-template-columns: 280px 1fr;
+    grid-template-areas:
+      "top top"
+      "left center"
+      "right center";
+  }
+}
+
+/* Tablet: vertical stacking */
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "top"
+      "center"
+      "left"
+      "right";
+  }
+}
+
+/* Radar always full width */
+#center {
+  width: 100% !important;
+  height: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+canvas#radar {
+  width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+
+/* Panels scroll independently */
+#left, #right {
+  width: 100%;
+  overflow-y: auto;
 }
 
 </style>
@@ -296,8 +378,8 @@ html, body { width:100%; height:100%; overflow:auto; }
 <body>
 <div class="app">
   <header>
-    <h1>SETCA</h1>
-    <button id="start" class="btn focusable">▶️ Iniciar</button>
+    <h1>SETCA-PERÚ — Vista Única (PRO v5)</h1>
+    <button id="start" style="display:none" class="btn focusable">▶️ Iniciar</button>
     <button id="pause" class="btn focusable">⏸️ Pausar</button>
     <button id="reportBtn" class="btn focusable">📝 Reporte</button>
     <span id="stateChip" class="pill">Pausada</span>
@@ -333,7 +415,7 @@ html, body { width:100%; height:100%; overflow:auto; }
         <div class="row">
           <button id="addFighter" class="btn mini focusable">➕ Caza</button>
           <button id="addCom" class="btn mini focusable">✈️ Comercial</button>
-          <button id="delLast" class="btn mini focusable">🗑️ Último</button>
+          <button id="delLast" class="btn mini focusable">🗑️ Eliminar</button>
         </div>
       </div>
     </section>
@@ -454,7 +536,7 @@ const INIT_PLANES=[
   {name:'R3',id:'R3',x:0,y:-40,hdg:90, spd:500, tgtSpd:500, alt:22000, tgtAlt:22000, turn:2.5,tgtHdg:90, ghosts:[], lastDet:0, fail:{comms:false,eng:'none',cab:'none',gear:false,bird:false}, kills:0, fuel:100, jamming:false},
 ];
 let st={
-  planes: JSON.parse(JSON.stringify(INIT_PLANES)),
+  planes: [],
   roles: {R1:'Friend',R2:'Bandit',R3:'Friend'},
   sel: [],
   metric:false,
@@ -606,6 +688,25 @@ function spawnFormation(key){
 
 /* ===== Canvas ===== */
 const cvs=$('#radar'),ctx=cvs.getContext('2d'); let W=0,H=0,CX=0,CY=0,zoom=1,offX=0,offY=0;
+
+/* === Pan táctil (mover radar con un dedo) === */
+let __touchPan = null;
+cvs.addEventListener('touchstart', e=>{
+  if(e.touches.length !== 1) return; // evitar conflicto con zoom
+  const t = e.touches[0];
+  __touchPan = { x:t.clientX, y:t.clientY, ox:offX, oy:offY };
+},{passive:true});
+
+cvs.addEventListener('touchmove', e=>{
+  if(!__touchPan || e.touches.length !== 1) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  offX = __touchPan.ox + (t.clientX - __touchPan.x);
+  offY = __touchPan.oy + (t.clientY - __touchPan.y);
+},{passive:false});
+
+cvs.addEventListener('touchend', ()=>{ __touchPan = null; });
+
 function resize(){W=$('#center').clientWidth;H=$('#center').clientHeight;cvs.width=W;cvs.height=H;CX=W/2;CY=H/2;}
 addEventListener('resize',resize);resize();
 
@@ -684,8 +785,10 @@ function drawPlane(p){
   if(st.predMin>0){const t=st.predMin*60,nmps=(p.spd/NM2KM)/3600;const d=nmps*t;const ex=p.x+Math.cos(lr)*d,ey=p.y+Math.sin(lr)*d;const se=toScreen(ex,ey);ctx.setLineDash([5,5]);ctx.strokeStyle='#2ee74f';ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(se.x,se.y);ctx.stroke();ctx.setLineDash([]);}
   ctx.fillStyle='#eaffea';ctx.font='12px monospace';ctx.textAlign='left';
   ctx.fillText(p.name,s.x+12,s.y-6);
-  if(st.metric){ctx.fillText(`${(p.alt*FT2M|0)} m`,s.x+12,s.y+8);ctx.fillText(`${p.spd.toFixed(0)} km/h`,s.x+12,s.y+22);}
-  else {ctx.fillText(`${p.alt|0} ft`,s.x+12,s.y+8);ctx.fillText(`${(p.spd*KMH2KTS).toFixed(0)} kts`,s.x+12,s.y+22);}
+  if(st.metric){ctx.fillText(`${(p.alt*FT2M|0)} m`,s.x+12,s.y+8);ctx.fillText(`${p.spd.toFixed(0)} km/h`,s.x+12,s.y+22);
+      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);}
+  else {ctx.fillText(`${p.alt|0} ft`,s.x+12,s.y+8);ctx.fillText(`${(p.spd*KMH2KTS).toFixed(0)} kts`,s.x+12,s.y+22);
+      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);}
   if(st.sel.includes(p.id)){ctx.strokeStyle='#ffe066';ctx.strokeRect(s.x-10,s.y-10,20,20);}
   if(p.jamming){
     const t=(performance.now()%1000)/1000;const r=10+8*Math.sin(t*2*Math.PI);
@@ -772,7 +875,16 @@ function drawPairs(){
     const brg=String(Math.round(pr.rel||0)).padStart(3,'0')+'°';
     const dist=st.metric?(pr.dKM||0).toFixed(1)+' KM':(pr.dNM||0).toFixed(1)+' NM';
     const dal=st.metric?((pr.dAlt||0)*FT2M|0)+' m':((pr.dAlt||0)|0)+' ft';
-    const txt=`${brg} / ${dist} / ${dal}`;
+    const BALT = st.metric?((B.alt*FT2M|0)+' m'):((B.alt|0)+' ft');
+      const DALT = st.metric?((pr.dAlt*FT2M|0)+' m'):((pr.dAlt|0)+' ft');
+      // SNAP logic
+      const ownHdg = A.hdg||0;
+      const relClock = (((pr.rel - ownHdg)+360)%360);
+      const clock = ((Math.round(relClock/30)%12)||12);
+      const updown = pr.dAlt>0 ? 'UP' : (pr.dAlt<0 ? 'DOWN' : 'LVL');
+      const distVal = st.metric ? pr.dKM : pr.dNM;
+      const snapMode = st.metric ? (pr.dKM<=15) : (pr.dNM<=8); // ~15km ≈ 8nm
+      const txt = snapMode ? `${clock} / ${dist} / ${updown}` : `${brg} / ${dist} / ${BALT} / ${DALT}`;
     ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(midX-95,midY-10,190,20);
     ctx.fillStyle='#eaffea';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(txt,midX,midY+5);
   });
@@ -867,20 +979,26 @@ addEventListener('mouseup',()=>{draggingPlane=null;draggingDrawing=null;dragStar
     const id='D-'+Math.random().toString(36).slice(2,6).toUpperCase();
     if(tool.tool==='point'){
       st.drawings.push({id,type:'point',x:a.x,y:a.y});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
     } else if(tool.tool==='line'){
       st.drawings.push({id,type:'line',x:a.x,y:a.y,ex:b.x,ey:b.y});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
     } else if(tool.tool==='circle'){
       const r=Math.hypot(b.x-a.x,b.y-a.y);
       st.drawings.push({id,type:'circle',x:a.x,y:a.y,r});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
     } else if(tool.tool==='square'){
       const side=Math.max(Math.abs(b.x-a.x),Math.abs(b.y-a.y));
       const cx=a.x+(b.x-a.x)/2, cy=a.y+(b.y-a.y)/2;
       st.drawings.push({id,type:'square',x:cx,y:cy,a:side});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
     } else if(tool.tool==='bullseye'){
       st.drawings.push({id,type:'bullseye',x:a.x,y:a.y});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
     } else if(tool.tool==='label'){
       const text=prompt('Texto de etiqueta:');
       if(text) st.drawings.push({id,type:'label',x:a.x,y:a.y,text});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
     }
     st.selectedDrawing = id;
   });
@@ -893,8 +1011,10 @@ addEventListener('mouseup',()=>{draggingPlane=null;draggingDrawing=null;dragStar
       if(tool.tool==='label'){
         const text=prompt('Texto de etiqueta:');
         if(text) st.drawings.push({id,type:'label',x,y,text});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
       } else {
         st.drawings.push({id,type:'point',x,y});
+ensureDrawingName(st.drawings[st.drawings.length-1]);
       }
       st.selectedDrawing=id;
     };
@@ -902,11 +1022,7 @@ addEventListener('mouseup',()=>{draggingPlane=null;draggingDrawing=null;dragStar
   // Delete button to remove selected drawing
   const delBtn = $('#delDraw');
   if(delBtn){
-    delBtn.onclick = ()=>{
-      if(!st.selectedDrawing) return;
-      st.drawings = st.drawings.filter(d=>d.id!==st.selectedDrawing);
-      st.selectedDrawing=null;
-    };
+    
   }
 })();
 
@@ -956,7 +1072,7 @@ function repaintNav(){
     const c=document.createElement('div');c.className='card';
     c.innerHTML=`<div class="row" style="justify-content:space-between">
         <input id="nm-${id}" class="ghost focusable focusAlt" type="text" value="${p.name}" style="flex:1"><span class="pill">${p.hdg.toFixed(0)}°</span></div>
-      <div class="row"><span class="mini">Rumbo</span><input id="hdg-${id}" class="ghost focusable focusAlt" type="number" value="${p.tgtHdg.toFixed(0)}"></div>
+      <div class="row"><span class="mini">Rumbo</span><input id="hdg-${id}" class="ghost focusable focusAlt" type="number" value="${p.tgtHdg.toFixed(0)}"> <button class="mini btn focusable" data-hdg="-10" data-id="${id}">-10</button> <button class="mini btn focusable" data-hdg="+10" data-id="${id}">+10</button></div>
       <div class="row"><span class="mini">Vel</span><input id="spd-${id}" class="ghost focusable focusAlt" type="number" value="${st.metric?p.tgtSpd.toFixed(0):(p.tgtSpd*KMH2KTS).toFixed(0)}"></div>
       <div class="row"><span class="mini">Alt</span><input id="alt-${id}" class="ghost focusable focusAlt" type="number" value="${st.metric?(p.tgtAlt*FT2M|0):(p.tgtAlt|0)}"></div>
       <div class="row"><span class="mini">Giro °/s</span><input id="tr-${id}" class="ghost focusable focusAlt" type="number" step="0.1" value="${p.turn.toFixed(1)}"></div>
@@ -974,6 +1090,15 @@ function repaintNav(){
     const focusables=c.querySelectorAll('.focusable, input, select, button');
     focusables.forEach(el=>{el.addEventListener('focus',()=>el.classList.add('focusGlow'));el.addEventListener('blur',()=>el.classList.remove('focusGlow'));el.addEventListener('click',()=>flash(el));});
     c.querySelector('#nm-'+id).onchange=e=>p.name=e.target.value;
+    
+      c.querySelectorAll('button[data-hdg]').forEach(btn=>{
+        btn.onclick = ()=>{
+          const delta = btn.getAttribute('data-hdg')==='+10'?10:-10;
+          p.tgtHdg = ((p.tgtHdg + delta) % 360 + 360) % 360;
+          repaintNav();
+        };
+      });
+
     c.querySelector('#hdg-'+id).onchange=e=>p.tgtHdg=parseFloat(e.target.value)||0;
     c.querySelector('#spd-'+id).onchange=e=>p.tgtSpd=st.metric?(+e.target.value||0):((+e.target.value||0)*KTS2KMH);
     c.querySelector('#alt-'+id).onchange=e=>p.tgtAlt=st.metric?((+e.target.value||0)/FT2M):(+e.target.value||0);
@@ -1059,7 +1184,13 @@ $('#start').onclick=()=>{
     if(!st.t0) st.t0 = performance.now(); else st.t0 = performance.now() - st.elapsed;
   }
 };
-$('#pause').onclick=()=>{ st.paused=true; simStateEl.textContent='PAUSA'; stateChip.textContent='Pausada'; stateChip.style.borderColor='#666'; stateChip.style.color='#ccc'; };
+$('#pause').onclick = ()=>{
+  st.paused = !st.paused; // toggle local
+  const chip = document.getElementById('stateChip');
+  const simst = document.getElementById('simstate');
+  if(chip) chip.textContent = st.paused ? 'Pausada' : 'En curso';
+  if(simst) simst.textContent = st.paused ? 'PAUSA' : 'RUN';
+};
 $('#reportBtn').onclick=()=>{ $('#report').style.display='block'; renderReport(); };
 $('#closeReport').onclick=()=>{ $('#report').style.display='none'; };
 $('#uMetric').onclick=()=>{ st.metric=true; repaintNav(); repaintStudent(); repaintAlt(); flash($('#uMetric')); };
@@ -1083,7 +1214,7 @@ $('#addCom').onclick=()=>{
   const p={name:'COMERCIAL '+(Math.floor(Math.random()*900)+100),id,x,y,hdg,spd:850,tgtSpd:850,alt:30000+(Math.random()*8000|0),tgtAlt:30000+(Math.random()*8000|0),turn:1.2,tgtHdg:hdg,ghosts:[],lastDet:0,fail:{comms:false,eng:'none',cab:'none',gear:false,bird:false},kills:0,fuel:100,jamming:false};
   st.planes.push(p); st.roles[id]='Civilian'; repaintPlanesList(); repaintNav(); repaintPairs(); repaintAlt(); flash($('#addCom'));
 };
-$('#delLast').onclick=()=>{ if(st.planes.length>0){const d=st.planes.pop(); st.sel=st.sel.filter(x=>x!==d.id); st.pairs=st.pairs.filter(pr=>pr.a!==d.id&&pr.b!==d.id); repaintPlanesList(); repaintNav(); repaintPairs(); repaintAlt(); flash($('#delLast')); }};
+
 $('#altFt').onclick=()=>{ st.altUnit='ft'; repaintAlt(); flash($('#altFt')); };
 $('#altM').onclick=()=>{ st.altUnit='m'; repaintAlt(); flash($('#altM')); };
 $('#doPair').onclick=()=>{
@@ -1869,6 +2000,308 @@ $$('#pFormations button[data-form]').forEach(btn=>{
   console.log('Realtime missile/radar/jammer sync active.');
 })();
 /* === END PATCH === */
+
+// === Override: Delete specific plane instead of last ===
+(function(){
+  const btn = document.getElementById('delLast');
+  if(!btn) return;
+  btn.onclick = ()=>{
+    if(!st || !Array.isArray(st.planes) || st.planes.length===0) return;
+    const options = st.planes.map(p=> `${p.id} — ${p.name}`).join('
+');
+    const pick = prompt('Eliminar avión (ID — Nombre):
+' + options + '
+
+Escribe el ID exactamente tal cual aparece:');
+    if(!pick) return;
+    const id = pick.split('—')[0].trim();
+    const before = st.planes.length;
+    st.planes = st.planes.filter(p=> p.id !== id);
+    if(st.sel && st.sel.includes(id)){ st.sel = st.sel.filter(x=>x!==id); }
+    if(before !== st.planes.length){
+      repaintPlanesList && repaintPlanesList();
+      repaintNav && repaintNav();
+      repaintAlt && repaintAlt();
+      // push to cloud if available
+      if(window._SETCA_SYNC && typeof window._SETCA_SYNC.push==='function'){ window._SETCA_SYNC.push(); }
+    }
+  };
+})();
+
+</script>
+
+<div id="deleteModal" style="position:fixed;top:0;left:0;width:100%;height:100%;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,0.6);z-index:9999;">
+  <div style="background:#1b1b1b;padding:20px;border-radius:6px;color:#eaffea;min-width:260px;">
+    <h3>Eliminar avión</h3>
+    <select id="deleteSelect" style="width:100%;margin-top:10px;margin-bottom:15px;background:#111;color:#eaffea;border:1px solid #555;"></select>
+    <button id="confirmDelete" class="btn mini focusable">Eliminar</button>
+    <button id="cancelDelete" class="btn mini focusable" style="margin-left:10px;">Cancelar</button>
+  </div>
+</div>
+
+
+<script>
+(function setupDeleteUI(){
+  function bind(){
+    const btn = document.getElementById('delLast');
+    const modal = document.getElementById('deleteModal');
+    const sel = document.getElementById('deleteSelect');
+    const ok = document.getElementById('confirmDelete');
+    const cancel = document.getElementById('cancelDelete');
+    if(!btn || !modal || !sel || !ok || !cancel) return false;
+
+    // Make sure no previous listeners accumulate
+    btn.replaceWith(btn.cloneNode(true));
+    const newBtn = document.getElementById('delLast');
+
+    newBtn.addEventListener('click', ()=>{
+      // Populate select fresh
+      sel.innerHTML = '';
+      if(window.st && Array.isArray(st.planes)){
+        st.planes.forEach(p=>{
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.id + " — " + p.name;
+          sel.appendChild(opt);
+        });
+      }
+      modal.style.display='flex';
+    });
+
+    ok.replaceWith(ok.cloneNode(true));
+    cancel.replaceWith(cancel.cloneNode(true));
+    const ok2 = document.getElementById('confirmDelete');
+    const cancel2 = document.getElementById('cancelDelete');
+
+    ok2.addEventListener('click', ()=>{
+      const id = sel.value;
+      if(id && window.st && Array.isArray(st.planes)){
+        st.planes = st.planes.filter(p=>p.id!==id);
+        if(st.sel) st.sel = st.sel.filter(x=>x!==id);
+        if(typeof repaintPlanesList==='function') repaintPlanesList();
+        if(typeof repaintNav==='function') repaintNav();
+        if(typeof repaintAlt==='function') repaintAlt();
+        if(typeof repaintPairs==='function') repaintPairs();
+        if(window._SETCA_SYNC && typeof window._SETCA_SYNC.push==='function'){ window._SETCA_SYNC.push(); }
+      }
+      modal.style.display='none';
+    });
+    cancel2.addEventListener('click', ()=>{ modal.style.display='none'; });
+
+    // Also close modal on background click
+    modal.addEventListener('click', (e)=>{
+      if(e.target===modal) modal.style.display='none';
+    });
+
+    return true;
+  }
+
+  if(document.readyState === 'complete' || document.readyState === 'interactive'){
+    bind();
+  } else {
+    document.addEventListener('DOMContentLoaded', bind, { once:true });
+  }
+
+  // Fallback rebinder (in case other code rebinds later)
+  setTimeout(bind, 800);
+  setTimeout(bind, 2000);
+})();
+</script>
+
+
+<script>
+function fitRadar(){
+  const box = document.getElementById('radarBox');
+  const cvs = document.getElementById('radar');
+  if(!box || !cvs) return;
+  const w = box.clientWidth;
+  cvs.width = w;
+  cvs.height = w;
+}
+window.addEventListener('resize', fitRadar);
+window.addEventListener('orientationchange', fitRadar);
+setTimeout(fitRadar,200);
+</script>
+
+
+<script>
+document.getElementById('delDraw').onclick = ()=>{
+  const modal = document.getElementById('deleteDrawingModal');
+  const sel = document.getElementById('deleteDrawingSelect');
+  sel.innerHTML='';
+  if(st && Array.isArray(st.drawings)){
+    st.drawings.forEach((d,i)=>{
+      const opt=document.createElement('option');
+      opt.value=i;
+      opt.textContent=d.name||('Gráfico '+(i+1));
+      sel.appendChild(opt);
+    });
+  }
+  modal.style.display='flex';
+};
+</script>
+
+
+<script>
+(function(){
+  const btn = document.getElementById('delDraw');
+  const modal = document.getElementById('deleteDrawingModal');
+  const sel = document.getElementById('deleteDrawingSelect');
+  if(btn){
+    btn.onclick = ()=>{
+      if(sel){
+        sel.innerHTML='';
+        if(window.st && Array.isArray(window.st.drawings)){
+          window.st.drawings.forEach((d,i)=>{
+            const opt=document.createElement('option');
+            opt.value=i;
+            opt.textContent=d.name||('Gráfico '+(i+1));
+            sel.appendChild(opt);
+          });
+        }
+      }
+      if(modal) modal.style.display='flex';
+    };
+  }
+})();
+</script>
+
+
+<div id="deleteDrawingModal" style="position:fixed;top:0;left:0;width:100%;height:100%;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,0.6);z-index:99999;">
+  <div style="background:#111;padding:16px;border:1px solid #2a5;border-radius:8px;color:#eaffea;min-width:240px;">
+    <h3 style="margin-top:0;margin-bottom:10px;">Eliminar gráfico</h3>
+    <select id="deleteDrawingSelect" style="width:100%;margin-bottom:12px;"></select>
+    <button id="confirmDeleteDrawing">Eliminar</button>
+    <button id="cancelDeleteDrawing">Cancelar</button>
+  </div>
+</div>
+
+
+<script>
+(function(){
+  const btn = document.getElementById('delDraw');
+  const modal = document.getElementById('deleteDrawingModal');
+  const sel = document.getElementById('deleteDrawingSelect');
+  const ok = document.getElementById('confirmDeleteDrawing');
+  const cancel = document.getElementById('cancelDeleteDrawing');
+  if(btn){
+    btn.onclick = ()=>{
+      if(sel){
+        sel.innerHTML='';
+        if(window.st && Array.isArray(window.st.drawings)){
+          window.st.drawings.forEach((d,i)=>{
+            const opt=document.createElement('option');
+            opt.value=i;
+            opt.textContent=d.name||('Gráfico '+(i+1));
+            sel.appendChild(opt);
+          });
+        }
+      }
+      modal.style.display='flex';
+    };
+  }
+  if(ok){
+    ok.onclick = ()=>{
+      const idx = parseInt(sel.value);
+      if(!isNaN(idx) && window.st && Array.isArray(window.st.drawings)){
+        window.st.drawings.splice(idx,1);
+        if(typeof repaintNav==='function') repaintNav();
+        if(typeof repaintAlt==='function') repaintAlt();
+        if(typeof repaintPairs==='function') repaintPairs();
+        if(window._SETCA_SYNC && typeof window._SETCA_SYNC.push==='function'){ window._SETCA_SYNC.push(); }
+      }
+      modal.style.display='none';
+    };
+  }
+  if(cancel){
+    cancel.onclick = ()=>{ modal.style.display='none'; };
+  }
+  if(modal){
+    modal.addEventListener('click',e=>{ if(e.target===modal) modal.style.display='none'; });
+  }
+})();
+</script>
+
+
+<script>
+function ensureDrawingName(d){
+  if(!d || d.name) return;
+  const base = {circle:'Círculo', line:'Línea', point:'Punto', square:'Cuadrado', bullseye:'Bullseye', label:'Etiqueta'}[d.type] || 'Gráfico';
+  let count = 1;
+  if(window.st && Array.isArray(st.drawings)){
+    count = st.drawings.filter(x => x.type === d.type).length;
+  }
+  d.name = base + " " + count;
+}
+</script>
+
+
+<script>
+(function(){
+  const btn = document.getElementById('delDraw');
+  const modal = document.getElementById('deleteDrawingModal');
+  const sel = document.getElementById('deleteDrawingSelect');
+  const ok = document.getElementById('confirmDeleteDrawing');
+  const cc = document.getElementById('cancelDeleteDrawing');
+  if(btn){
+    btn.onclick = ()=>{
+      if(sel){
+        sel.innerHTML='';
+        if(window.st && Array.isArray(st.drawings)){
+          st.drawings.forEach((d,i)=>{
+            const opt=document.createElement('option');
+            opt.value=i;
+            opt.textContent=d.name||('Gráfico '+(i+1));
+            sel.appendChild(opt);
+          });
+        }
+      }
+      modal.style.display='flex';
+    };
+  }
+  if(ok){
+    ok.onclick = ()=>{
+      const idx=parseInt(sel.value);
+      if(!isNaN(idx) && st.drawings && st.drawings[idx]){
+        st.drawings.splice(idx,1);
+        if(typeof repaintNav==='function') repaintNav();
+        if(typeof repaintAlt==='function') repaintAlt();
+        if(typeof repaintPairs==='function') repaintPairs();
+        if(window._SETCA_SYNC && typeof _SETCA_SYNC.push==='function') _SETCA_SYNC.push();
+      }
+      modal.style.display='none';
+    };
+  }
+  if(cc){
+    cc.onclick = ()=>{ modal.style.display='none'; };
+  }
+})();
+</script>
+
+
+<script>
+document.getElementById('radar').addEventListener('click', function(e){
+  const rect=this.getBoundingClientRect();
+  const wx=(e.clientX-rect.left - (this.width/2) - window.offX)/(window.zoom*20);
+  const wy=(e.clientY-rect.top - (this.height/2) - window.offY)/(window.zoom*20);
+  if(!window.st || !Array.isArray(st.drawings)) return;
+  let best=null,bd=1e9;
+  st.drawings.forEach(d=>{
+    const dx=wx-d.x, dy=wy-d.y;
+    const dist=Math.hypot(dx,dy);
+    if(dist< (d.type==='point'?1:3) && dist<bd){bd=dist;best=d;}
+  });
+  if(best){
+    const nuevo=prompt("Nuevo nombre:", best.name||"");
+    if(nuevo && nuevo.trim()){
+      best.name=nuevo.trim();
+      if(typeof repaintNav==='function') repaintNav();
+      if(typeof repaintAlt==='function') repaintAlt();
+      if(typeof repaintPairs==='function') repaintPairs();
+      if(window._SETCA_SYNC && typeof _SETCA_SYNC.push==='function') _SETCA_SYNC.push();
+    }
+  }
+});
 </script>
 
 
@@ -1877,17 +2310,14 @@ $$('#pFormations button[data-form]').forEach(btn=>{
   const cvs = document.getElementById('radar');
   function fitRadar(){
     if(!cvs) return;
-    const w = Math.min(cvs.parentElement.clientWidth, window.innerWidth);
-    const size = Math.max(200, Math.floor(w)); // mínimo razonable
-    // Ajusta atributos (pixeles reales) para mantener calidad del dibujo
-    if(cvs.width !== size) cvs.width = size;
-    if(cvs.height !== size) cvs.height = size;
+    const w = cvs.parentElement.clientWidth;
+    cvs.width = w;
+    cvs.height = w;
   }
   window.addEventListener('resize', fitRadar);
   window.addEventListener('orientationchange', fitRadar);
   document.addEventListener('DOMContentLoaded', fitRadar);
-  setTimeout(fitRadar, 50);
-  setTimeout(fitRadar, 300);
+  setTimeout(fitRadar, 150);
 })();
 </script>
 
