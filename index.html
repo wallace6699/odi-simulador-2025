@@ -258,7 +258,7 @@ const app = initializeApp(firebaseConfig);
     "top"
     "left"
     "center";}
-  #right {display:none;}
+  #right {display:block;}
   header{flex-wrap:wrap;gap:6px;justify-content:center;text-align:center;}
 }
 @media (max-width: 768px) {
@@ -595,6 +595,25 @@ function spawnFormation(key){
 
 /* ===== Canvas ===== */
 const cvs=$('#radar'),ctx=cvs.getContext('2d'); let W=0,H=0,CX=0,CY=0,zoom=1,offX=0,offY=0;
+
+/* === Pan táctil (mover radar con un dedo) === */
+let __touchPan = null;
+cvs.addEventListener('touchstart', e=>{
+  if(e.touches.length !== 1) return; // evitar conflicto con zoom
+  const t = e.touches[0];
+  __touchPan = { x:t.clientX, y:t.clientY, ox:offX, oy:offY };
+},{passive:true});
+
+cvs.addEventListener('touchmove', e=>{
+  if(!__touchPan || e.touches.length !== 1) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  offX = __touchPan.ox + (t.clientX - __touchPan.x);
+  offY = __touchPan.oy + (t.clientY - __touchPan.y);
+},{passive:false});
+
+cvs.addEventListener('touchend', ()=>{ __touchPan = null; });
+
 function resize(){W=$('#center').clientWidth;H=$('#center').clientHeight;cvs.width=W;cvs.height=H;CX=W/2;CY=H/2;}
 addEventListener('resize',resize);resize();
 
@@ -1985,4 +2004,3 @@ Escribe el ID exactamente tal cual aparece:');
 
 </body>
 </html>
-odi-simulador-2025/index.html at main · wallace6699/odi-simulador-2025 
