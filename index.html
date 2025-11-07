@@ -700,9 +700,10 @@ cvs.addEventListener('touchstart', e=>{
 cvs.addEventListener('touchmove', e=>{
   if(!__touchPan || e.touches.length !== 1) return;
   e.preventDefault();
-  const t = e.touches[0];
-  offX = __touchPan.ox + (t.clientX - __touchPan.x);
-  offY = __touchPan.oy + (t.clientY - __touchPan.y);
+const t = e.touches[0];
+const sensitivity = 0.1; // 10 veces más suave
+offX = __touchPan.ox + (t.clientX - __touchPan.x) * sensitivity;
+offY = __touchPan.oy + (t.clientY - __touchPan.y) * sensitivity;
 },{passive:false});
 
 cvs.addEventListener('touchend', ()=>{ __touchPan = null; });
