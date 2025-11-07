@@ -1421,7 +1421,7 @@ $$('#pFormations button[data-form]').forEach(btn=>{
           e.preventDefault();
           const d = dist(e);
           const scale = d/d0;
-          const dy = (scale>z0) ? -100 : 100;
+          const dy = (scale>z0) ? -5 : 5;
           const midx = (e.touches[0].clientX + e.touches[1].clientX)/2;
           const midy = (e.touches[0].clientY + e.touches[1].clientY)/2;
           const evt = new WheelEvent('wheel', {deltaY: dy, clientX: midx, clientY: midy, bubbles: true, cancelable: true});
