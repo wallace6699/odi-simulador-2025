@@ -510,8 +510,6 @@ canvas#radar {
       <div class="panel-header"><h3>Misiles Entrantes</h3><span class="toggle" data-target="#pAlertsBody">▾</span></div>
       <div id="pAlertsBody" class="panel-body"><div id="missileAlerts" class="col"></div></div>
     </section>
-<!-- Online (beta) panel removed per user request -->
-
 
   </aside>
 </div>
@@ -701,7 +699,7 @@ cvs.addEventListener('touchmove', e=>{
   if(!__touchPan || e.touches.length !== 1) return;
   e.preventDefault();
 const t = e.touches[0];
-const sensitivity = 0.25; // 10 veces más suave
+const sensitivity = 0.4; 
 offX = __touchPan.ox + (t.clientX - __touchPan.x) * sensitivity;
 offY = __touchPan.oy + (t.clientY - __touchPan.y) * sensitivity;
 },{passive:false});
@@ -1421,7 +1419,7 @@ $$('#pFormations button[data-form]').forEach(btn=>{
           e.preventDefault();
           const d = dist(e);
           const scale = d/d0;
-          const dy = (scale>z0) ? -1 : 1;
+          const dy = (scale>z0) ? -0.3 : 0.3;
           const midx = (e.touches[0].clientX + e.touches[1].clientX)/2;
           const midy = (e.touches[0].clientY + e.touches[1].clientY)/2;
           const evt = new WheelEvent('wheel', {deltaY: dy, clientX: midx, clientY: midy, bubbles: true, cancelable: true});
