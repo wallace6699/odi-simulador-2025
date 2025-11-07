@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte Parcial de Verificación</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body {
+    background: #f5f6f8;
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    color: #000;
+    margin: 0;
+    padding: 10px; /* Reducimos el padding general */
+  }
+
+  header {
+    text-align: center;
+    border-bottom: 2px solid #003366;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+
+  header h1 {
+    font-size: 16pt; /* Reducido */
+    color: #003366;
+    margin: 0;
+  }
+
+  header h2 {
+    font-size: 10pt; /* Reducido */
+    color: #333;
+    margin: 3px 0 0 0;
+    font-weight: normal;
+  }
+
+  /* --- CONTENEDOR PRINCIPAL: ALINEACIÓN Y ANCHO --- */
+  .datos, .grafico-observaciones, table.resultados, .firmas {
+    max-width: 680px; /* ANCHO CRÍTICO REDUCIDO PARA A4 */
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .datos {
+    margin-top: 5px;
+    font-size: 10.5pt; /* Reducido */
+  }
+
+  .datos input {
+    border: none;
+    border-bottom: 1px solid #333;
+    width: 160px; /* Reducido */
+    font-size: 10.5pt;
+    background: transparent;
+    text-align: center;
+  }
+  /* Estilo específico para el campo Misión */
+  .datos input[id="mision"] {
+      width: 80%;
+      text-align: left;
+  }
+
+  .datos table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .datos td {
+    padding: 2px; /* Reducido */
+  }
+
+  /* --- GRÁFICO Y OBSERVACIONES (FLEXBOX) --- */
+  .grafico-observaciones {
+    display: flex;
+    justify-content: space-around; /* Asegura espacio entre ambos */
+    align-items: flex-start;
+    margin: 8px auto; /* Reducido */
+    width: 680px; 
+  }
+
+  canvas {
+    display: block;
+    margin: 0;
+    background: #fff;
+    border: 1px solid #aaa;
+    border-radius: 6px; /* Bordes más pequeños */
+    width: 320px !important; /* TAMAÑO CRÍTICO REDUCIDO */
+    height: 320px !important; /* TAMAÑO CRÍTICO REDUCIDO */
+  }
+
+  .observaciones-box {
+    width: 320px; /* Mismo ancho que el canvas */
+    height: 320px; /* Mismo alto que el canvas */
+    padding: 10px; /* Reducido */
+    background: #fff;
+    border: 1px solid #aaa;
+    border-radius: 6px;
+    box-sizing: border-box;
+  }
+
+  .observaciones-box h3 {
+    margin-top: 0;
+    margin-bottom: 5px; /* Reducido */
+    font-size: 10.5pt;
+    color: #003366;
+    text-align: center;
+  }
+
+  .observaciones-box textarea {
+    width: 100%;
+    height: 90%;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 6px; /* Reducido */
+    font-size: 10pt; /* Reducido */
+    resize: none;
+    box-sizing: border-box;
+  }
+  
+  /* --- TABLA DE RESULTADOS --- */
+  table.resultados {
+    margin: 8px auto;
+    border-collapse: collapse;
+    width: 680px; 
+    font-size: 10pt; /* Reducido */
+  }
+
+  table.resultados th, table.resultados td {
+    border: 1px solid #999;
+    padding: 3px; /* Reducido */
+    text-align: center;
+  }
+
+  table.resultados th {
+    background-color: #dce6f2;
+    color: #003366;
+  }
+
+  /* --- RESUMEN Y FIRMAS --- */
+  .resumen {
+    text-align: center;
+    font-weight: 600;
+    font-size: 10.5pt; /* Reducido */
+    margin-top: 4px; /* Reducido */
+  }
+
+  .firmas {
+    margin-top: 25px; /* Reducido */
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+    display: flex;
+    justify-content: space-around;
+    font-size: 10.5pt; /* Reducido */
+  }
+
+  .firmas div {
+    text-align: center;
+  }
+
+  .firmas hr {
+    border: none;
+    border-top: 1px solid #000;
+    width: 200px; /* Reducido */
+    margin-bottom: 10px; /* Reducido */
+    margin-top: 35px; /* Reducido */
+  }
+
+  .botonera {
+    text-align: center;
+    margin-top: 10px; /* Reducido */
+  }
+
+  button {
+    padding: 6px 12px; /* Reducido */
+    font-size: 12px; /* Reducido */
+    background-color: #003366;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+
+  /* --- AJUSTES DE IMPRESIÓN --- */
+  @media print {
+    body {
+      background: white;
+      padding: 5mm; /* Reducimos el padding de impresión */
+      margin: 0;
+      transform: scale(1); /* Quitamos el escalado */
+      transform-origin: top center;
+    }
+    .botonera { display: none !important; }
+    input, textarea { border: 1px solid #ccc !important; } /* Borde sutil para impresión */
+    .observaciones-box textarea {
+        overflow: hidden;
+        border: 1px solid #aaa !important; 
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>REPORTE PARCIAL DE VERIFICACIÓN</h1>
+  <h2>Sistema de Entrenamiento Táctico de Control de Aeronaves – SETCA</h2>
+</header>
+
+<section class="datos">
+  <table>
+    <tr>
+      <td><strong>Alumno:</strong> <input type="text" id="alumno" placeholder="Nombre completo"></td>
+      <td><strong>Instructor:</strong> <input type="text" id="instructor" placeholder="Nombre completo"></td>
+    </tr>
+    <tr> <td><strong>Fecha:</strong> <input type="date" id="fecha"></td>
+      <td><strong>Hora:</strong> <input type="time" id="hora"></td>
+    </tr>
+    <tr>
+      <td colspan="2"><strong>Duración de instrucción (min):</strong> <input type="number" id="tiempo" min="0" value="60"></td>
+    </tr>
+    <tr> <td colspan="2"><strong>Misión:</strong> <input type="text" id="mision" placeholder="Nombre/Descripción de la Misión"></td>
+    </tr>
+  </table>
+</section>
+
+<div class="grafico-observaciones">
+    <canvas id="radarChart"></canvas>
+    
+    <div class="observaciones-box">
+        <h3>📝 Observaciones del Instructor</h3>
+        <textarea id="observacionesTexto" placeholder="Ingrese aquí comentarios detallados sobre el desempeño del alumno, puntos a mejorar y logros destacados."></textarea>
+    </div>
+</div>
+
+<table class="resultados" id="tablaResultados">
+  <thead>
+    <tr>
+      <th>Indicador</th>
+      <th>Puntaje</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Conciencia Situacional</td><td><input type="number" id="Conciencia" min="0" max="10" value="7" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Toma de Decisiones</td><td><input type="number" id="Decisiones" min="0" max="10" value="8" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Comunicación</td><td><input type="number" id="Comunicacion" min="0" max="10" value="7" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Reacción</td><td><input type="number" id="Reaccion" min="0" max="10" value="7" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Precisión Vectorial</td><td><input type="number" id="Precision" min="0" max="10" value="9" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Coordinación</td><td><input type="number" id="Coordinacion" min="0" max="10" value="8" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Dominio de Simulador</td><td><input type="number" id="Simulador" min="0" max="10" value="7" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Análisis Post-Misión</td><td><input type="number" id="Analisis" min="0" max="10" value="8" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Conocimiento Técnico</td><td><input type="number" id="Conocimiento" min="0" max="10" value="9" oninput="updateScoresAutomatically()"></td></tr>
+    <tr><td>Liderazgo bajo Estrés</td><td><input type="number" id="Liderazgo" min="0" max="10" value="7" oninput="updateScoresAutomatically()"></td></tr>
+  </tbody>
+  <tfoot>
+    <tr><th>Promedio General</th><th id="promedioFinal">—</th></tr>
+    <tr><th>Nivel de Aptitud</th><th id="nivelAptitud">—</th></tr>
+  </tfoot>
+</table>
+
+<div class="resumen" id="resultado">Modifique los puntajes para actualizar el reporte.</div>
+
+<div class="firmas">
+  <div>
+    <hr>
+    <span>Firma del Alumno<br><strong id="firmaAlumno">—</strong></span>
+  </div>
+  <div>
+    <hr>
+    <span>Firma del Instructor<br><strong id="firmaInstructor">—</strong></span>
+  </div>
+</div>
+
+<div class="botonera">
+  <button onclick="generarReporte()">Generar Reporte</button>
+  <button onclick="window.print()">🖨️ Imprimir / PDF</button>
+</div>
+
+<script>
+  // IDs de los campos de puntaje
+  const camposIndicadores = [
+    "Conciencia","Decisiones","Comunicacion","Reaccion","Precision",
+    "Coordinacion","Simulador","Analisis","Conocimiento","Liderazgo"
+  ];
+
+  const ctx = document.getElementById('radarChart');
+  const radarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: [
+        'Conciencia Situacional','Toma de Decisiones','Comunicación','Reacción',
+        'Precisión Vectorial','Coordinación','Dominio de Simulador',
+        'Análisis Post-Misión','Conocimiento Técnico','Liderazgo bajo Estrés'
+      ],
+      datasets: [{
+        label: 'Desempeño ODI-CO',
+        data: [],
+        fill: true,
+        backgroundColor: 'rgba(0,75,145,0.15)',
+        borderColor: '#004b91',
+        pointBackgroundColor: '#004b91'
+      }]
+    },
+    options: {
+      scales: {
+        r: {
+          min: 0, max: 10, ticks: { stepSize: 2, color: '#555' },
+          grid: { color: 'rgba(0,0,0,0.1)' },
+          pointLabels: { color: '#222', font: { size: 10 } }
+        }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  // Función para actualizar puntajes y gráfico automáticamente
+  function updateScoresAutomatically() {
+      const valores = camposIndicadores.map(id => {
+          const input = document.getElementById(id);
+          // Asegura que el valor esté entre 0 y 10, y sea numérico
+          let valor = parseFloat(input.value) || 0;
+          if (valor < 0) valor = 0;
+          if (valor > 10) valor = 10;
+          // Opcional: corregir el valor en el input si está fuera de rango
+          // input.value = valor; 
+          return valor;
+      });
+      
+      // 1. Actualizar Gráfico
+      radarChart.data.datasets[0].data = valores;
+      radarChart.update();
+
+      // 2. Calcular Promedio y Nivel
+      const promedio = valores.reduce((a,b)=>a+b,0)/valores.length;
+      let nivel="";
+      if (promedio>=8.5) nivel="APTO PARA MISIONES REALES";
+      else if (promedio>=7) nivel="APTO PARA MISIONES VIRTUALES";
+      else if (promedio>=5) nivel="EN ENTRENAMIENTO – REQUIERE SUPERVISIÓN";
+      else nivel="NO APTO – CONTINUAR FORMACIÓN BÁSICA";
+
+      // 3. Actualizar Resultados
+      document.getElementById("promedioFinal").textContent = promedio.toFixed(2);
+      document.getElementById("nivelAptitud").textContent = nivel;
+      document.getElementById("resultado").textContent = `Resultado global: ${nivel} (${promedio.toFixed(1)}/10)`;
+  }
+  
+  // Función para "Generar Firmas" (El reporte se actualiza solo)
+  function generarReporte() {
+    // Solo actualiza las firmas
+    const alumno = document.getElementById("alumno").value || "—";
+    const instructor = document.getElementById("instructor").value || "—";
+    document.getElementById("firmaAlumno").textContent = alumno;
+    document.getElementById("firmaInstructor").textContent = instructor;
+  }
+
+  // Ejecutar el cálculo inicial al cargar la página
+  window.onload = updateScoresAutomatically;
+</script>
+
+</body>
+</html>
