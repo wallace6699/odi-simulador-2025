@@ -724,10 +724,15 @@ const timerEl=$('#timer'),stateChip=$('#stateChip'),fpsEl=$('#fps'),simStateEl=$
 function tickTimer(){const now=new Date();const s=String(now.getSeconds()).padStart(2,'0');const m=String(now.getMinutes()).padStart(2,'0');const h=String(now.getHours()).padStart(2,'0');const d=String(now.getDate()).padStart(2,'0');const mo=String(now.getMonth()+1).padStart(2,'0');const y=now.getFullYear();timerEl.textContent=`${d}-${mo}-${y} ${h}:${m}:${s}`;}
 setInterval(tickTimer,1000);tickTimer();
 
-/* ===== Zoom ===== */
-const MIN_Z=0.02,MAX_Z=6;
-cvs.addEventListener('wheel',e=>{e.preventDefault();const f=e.deltaY<0?1.12:1/1.12;zoom=Math.min(MAX_Z,Math.max(MIN_Z,zoom*f));},{passive:false});
-
+/* ===== Zoom ultra preciso y extendido de rueda de mouse===== */
+const MIN_Z = 0.02, MAX_Z = 12; // más alcance de acercamiento
+cvs.addEventListener('wheel', e => {
+  e.preventDefault();
+  // f más suave → movimientos de rueda ultra precisos (~2%)
+  const f = e.deltaY < 0 ? 1.02 : 1 / 1.02;
+  zoom = Math.min(MAX_Z, Math.max(MIN_Z, zoom * f));
+}, {passive: false});
+  
 /* ===== Pan con botón derecho ===== */
 let panning=false, panStart=null, offStart=null;
 cvs.addEventListener('contextmenu',e=>e.preventDefault());
