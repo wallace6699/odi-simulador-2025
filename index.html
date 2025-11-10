@@ -386,7 +386,12 @@ canvas#radar {
   text-align: center;
   border-radius: 4px;
 }
-
+/* ===== Habilita zoom táctil con dos dedos en el radar ===== */
+canvas#radar {
+  touch-action: none;           /* evita el zoom/pan del navegador */
+  -webkit-user-select: none;    /* evita selección accidental en iPhone/iPad */
+  user-select: none;            /* evita selección en Android y PC */
+}
 </style>
 </head>
 <body>
