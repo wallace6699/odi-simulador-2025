@@ -725,7 +725,7 @@ function tickTimer(){const now=new Date();const s=String(now.getSeconds()).padSt
 setInterval(tickTimer,1000);tickTimer();
 
 /* ===== Zoom ultra preciso y extendido de rueda de mouse===== */
-const MIN_Z = 0.02, MAX_Z = 12; // más alcance de acercamiento
+const MIN_Z = 0.02, MAX_Z = 15; // más alcance de acercamiento
 cvs.addEventListener('wheel', e => {
   e.preventDefault();
   // f más suave → movimientos de rueda ultra precisos (~2%)
