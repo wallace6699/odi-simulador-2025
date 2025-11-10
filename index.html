@@ -392,6 +392,15 @@ canvas#radar {
   -webkit-user-select: none;    /* evita selección accidental en iPhone/iPad */
   user-select: none;            /* evita selección en Android y PC */
 }
+
+/* tus estilos anteriores... */
+
+/* ===== Color negro exclusivo para el reporte táctico ===== */
+#reportContent, 
+#reportContent * {
+  color: #000000 !important;
+}
+
 </style>
 </head>
 <body>
@@ -1076,27 +1085,205 @@ function paintAlerts(){
 }
 
 /* ===== Telemetría y Reporte ===== */
-const tel={rows:[],evts:[]}; function fmt(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000);return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;}
-function logTel(){ if(st.paused) return; tel.rows.push({t:st.elapsed,planes:st.planes.map(p=>({id:p.id,name:p.name,alt:p.alt,spd:p.spd}))});}
-function logEvent(txt){ tel.evts.push({t:st.elapsed,txt});}
-let telTick=0;
-function renderReport(){
-  const cont=$('#reportContent');const fecha=new Date().toLocaleString();const lanz=tel.evts.filter(e=>e.txt.includes('LANZAMIENTO')).length;const hits=tel.evts.filter(e=>e.txt.includes('SPLASH')).length;const tasa=lanz?((hits/lanz)*100).toFixed(1)+'%':'N/A';
-  let html=`<h2>Reporte Táctico</h2><div class="row" style="justify-content:space-between"><span><b>Fecha:</b> ${fecha}</span><span><b>Duración:</b> ${fmt(st.elapsed)}</span></div>
-  <div class="row" style="justify-content:flex-end;gap:8px"><button onclick="window.print()">🖨️ Imprimir</button></div>
-  <h3>Estado Final de Aeronaves</h3><table><thead><tr><th>Nombre</th><th>Rol</th><th>Estado</th><th>Derribos</th><th>Vel</th><th>Alt</th></tr></thead><tbody>`;
-  st.planes.forEach(p=>{const stt=p._hit?'<b style="color:red">DESTRUIDO</b>':'Activo';const vel=st.metric?`${p.spd.toFixed(0)} km/h`:`${(p.spd*KMH2KTS).toFixed(0)} kts`;const alt=st.metric?`${(p.alt*FT2M|0)} m`:`${p.alt|0} ft`;html+=`<tr><td>${p.name}</td><td>${st.roles[p.id]||'N/A'}</td><td>${stt}</td><td>${p.kills||0}</td><td>${vel}</td><td>${alt}</td></tr>`;}); html+=`</tbody></table>`;
-  html+=`<h3>Gráficos</h3><div class="charts"><div><canvas id="altChart"></canvas></div><div><canvas id="spdChart"></canvas></div></div>`;
-  html+=`<h3>Eventos</h3><table>`; [...tel.evts].reverse().forEach(e=>{let s=''; if(e.txt.includes('SPLASH')||e.txt.includes('FALLA')) s='style="color:red;font-weight:700"'; if(e.txt.includes('LANZAMIENTO')) s='style="color:#e67e00;font-weight:700"'; html+=`<tr><td style="width:60px">[${fmt(e.t)}]</td><td ${s}>${e.txt}</td></tr>`;}); html+=`</table>`;
-  cont.innerHTML=html;
-  if(tel.rows.length>1){const labels=tel.rows.map(r=>fmt(r.t));const ids=[...new Set(tel.rows.flatMap(r=>r.planes.map(p=>p.id)))];
-    const colors=['#2ee74f','#35ff79','#9bffb0','#c6ffd6','#88ffa0','#eaffea','#a8ffcb','#7fffb5','#56ff9c','#12e45a'];
-    const altDS=ids.map((id,i)=>({label:(st.planes.find(p=>p.id===id)?.name)||id,data:tel.rows.map(r=>{const p=r.planes.find(x=>x.id===id);return p?(st.metric?p.alt*FT2M:p.alt):null;}),borderColor:colors[i%colors.length],fill:false,tension:.1,pointRadius:2}));
-    const spdDS=ids.map((id,i)=>({label:(st.planes.find(p=>p.id===id)?.name)||id,data:tel.rows.map(r=>{const p=r.planes.find(x=>x.id===id);return p?(st.metric?p.spd:p.spd*KMH2KTS):null;}),borderColor:colors[i%colors.length],fill:false,tension:.1,pointRadius:2}));
-    new Chart($('#altChart').getContext('2d'),{type:'line',data:{labels,datasets:altDS},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:`Altitud (${st.metric?'m':'ft'})`}}}});
-    new Chart($('#spdChart').getContext('2d'),{type:'line',data:{labels,datasets:spdDS},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:`Velocidad (${st.metric?'km/h':'kts'})`}}}});
+// ======================================================
+// === FUNCIÓN MEJORADA: GENERADOR DE REPORTE TÁCTICO ===
+// ======================================================
+const tel = { rows: [], evts: [] };
+
+function fmt(ms) {
+  if (ms < 0) ms = 0;
+  const s = Math.floor(ms / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function logTel() {
+  if (st.paused) return;
+  tel.rows.push({
+    t: st.elapsed,
+    planes: st.planes.map(p => ({
+      id: p.id,
+      name: p.name,
+      alt: p.alt,
+      spd: p.spd
+    }))
+  });
+}
+
+function logEvent(txt) {
+  tel.evts.push({ t: st.elapsed, txt });
+}
+
+let telTick = 0;
+
+function renderReport() {
+  const cont = $('#reportContent');
+  const fecha = new Date().toLocaleString();
+  const lanz = tel.evts.filter(e => e.txt.includes('LANZAMIENTO')).length;
+  const hits = tel.evts.filter(e => e.txt.includes('SPLASH')).length;
+  const tasa = lanz ? ((hits / lanz) * 100).toFixed(1) + '%' : 'N/A';
+
+  // === ENCABEZADO ===
+  let html = `
+  <h2 style="color:#000; margin-bottom:6px;">REPORTE TÁCTICO</h2>
+  <div class="row" style="justify-content:space-between; font-size:13px; color:#000;">
+    <span><b>Fecha:</b> ${fecha}</span>
+    <span><b>Duración:</b> ${fmt(st.elapsed)}</span>
+    <span><b>Tasa de acierto:</b> ${tasa}</span>
+  </div>
+  <div class="row" style="justify-content:flex-end;gap:8px; margin:5px 0;">
+    <button onclick="window.print()" style="padding:4px 8px;font-size:12px;">🖨️ Imprimir</button>
+  </div>`;
+
+  // === ESTADO FINAL DE AERONAVES ===
+  html += `
+  <h3 style="color:#000; margin:4px 0;">Estado Final de Aeronaves</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:12px; color:#000;">
+    <thead>
+      <tr style="background:#e6e6e6;">
+        <th style="border:1px solid #999; padding:3px;">Nombre</th>
+        <th style="border:1px solid #999; padding:3px;">Rol</th>
+        <th style="border:1px solid #999; padding:3px;">Estado</th>
+        <th style="border:1px solid #999; padding:3px;">Derribos</th>
+        <th style="border:1px solid #999; padding:3px;">Velocidad</th>
+        <th style="border:1px solid #999; padding:3px;">Altitud</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  st.planes.forEach(p => {
+    const stt = p._hit
+      ? '<b style="color:red;">DESTRUIDO</b>'
+      : '<span style="color:#000;">Activo</span>';
+    const vel = st.metric
+      ? `${p.spd.toFixed(0)} km/h`
+      : `${(p.spd * KMH2KTS).toFixed(0)} kts`;
+    const alt = st.metric
+      ? `${(p.alt * FT2M | 0)} m`
+      : `${p.alt | 0} ft`;
+    html += `
+      <tr>
+        <td style="border:1px solid #999; padding:3px;">${p.name}</td>
+        <td style="border:1px solid #999; padding:3px;">${st.roles[p.id] || 'N/A'}</td>
+        <td style="border:1px solid #999; padding:3px;">${stt}</td>
+        <td style="border:1px solid #999; padding:3px;">${p.kills || 0}</td>
+        <td style="border:1px solid #999; padding:3px;">${vel}</td>
+        <td style="border:1px solid #999; padding:3px;">${alt}</td>
+      </tr>`;
+  });
+
+  html += `</tbody></table>`;
+
+  // === GRÁFICOS ===
+  html += `
+  <h3 style="color:#000; margin:6px 0;">Gráficos</h3>
+  <div class="charts" style="display:flex;gap:10px;justify-content:center;">
+    <div style="width:48%;height:220px;"><canvas id="altChart"></canvas></div>
+    <div style="width:48%;height:220px;"><canvas id="spdChart"></canvas></div>
+  </div>`;
+
+  // === EVENTOS ===
+  html += `
+  <h3 style="color:#000; margin:6px 0;">Eventos</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <tbody>`;
+  [...tel.evts].reverse().forEach(e => {
+    let s = '';
+    if (e.txt.includes('SPLASH') || e.txt.includes('FALLA'))
+      s = 'style="color:red;font-weight:700"';
+    if (e.txt.includes('LANZAMIENTO'))
+      s = 'style="color:#ff6600;font-weight:700"';
+    html += `<tr><td style="width:60px;border-bottom:1px solid #ddd;">[${fmt(e.t)}]</td><td ${s}>${e.txt}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+
+  cont.innerHTML = html;
+
+  // === GRAFICAR ===
+  if (tel.rows.length > 1) {
+    const labels = tel.rows.map(r => fmt(r.t));
+    const ids = [...new Set(tel.rows.flatMap(r => r.planes.map(p => p.id)))];
+
+    // Paleta de colores más distinguible (para múltiples aeronaves)
+    const palette = [
+      '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+      '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+      '#008080', '#e6beff', '#9a6324', '#800000', '#808000'
+    ];
+
+    // Dataset ALTITUD
+    const altDS = ids.map((id, i) => ({
+      label: (st.planes.find(p => p.id === id)?.name) || id,
+      data: tel.rows.map(r => {
+        const p = r.planes.find(x => x.id === id);
+        return p ? (st.metric ? p.alt * FT2M : p.alt) : null;
+      }),
+      borderColor: palette[i % palette.length],
+      fill: false,
+      tension: 0.15,
+      pointRadius: 0
+    }));
+
+    // Dataset VELOCIDAD
+    const spdDS = ids.map((id, i) => ({
+      label: (st.planes.find(p => p.id === id)?.name) || id,
+      data: tel.rows.map(r => {
+        const p = r.planes.find(x => x.id === id);
+        return p ? (st.metric ? p.spd : p.spd * KMH2KTS) : null;
+      }),
+      borderColor: palette[(i + 3) % palette.length], // desplazado para distinguir
+      fill: false,
+      tension: 0.15,
+      pointRadius: 0
+    }));
+
+    // Gráfico de Altitud
+    new Chart($('#altChart').getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: altDS },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#000', font: { size: 11 } } },
+          title: {
+            display: true,
+            text: `Altitud (${st.metric ? 'm' : 'ft'})`,
+            color: '#000',
+            font: { size: 13, weight: 'bold' }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#000' }, grid: { color: '#ccc' } },
+          y: { ticks: { color: '#000' }, grid: { color: '#ddd' } }
+        }
+      }
+    });
+
+    // Gráfico de Velocidad
+    new Chart($('#spdChart').getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: spdDS },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#000', font: { size: 11 } } },
+          title: {
+            display: true,
+            text: `Velocidad (${st.metric ? 'km/h' : 'kts'})`,
+            color: '#000',
+            font: { size: 13, weight: 'bold' }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#000' }, grid: { color: '#ccc' } },
+          y: { ticks: { color: '#000' }, grid: { color: '#ddd' } }
+        }
+      }
+    });
   }
 }
+
 
 /* ===== UI repaint ===== */
 function repaintPlanesList(){
