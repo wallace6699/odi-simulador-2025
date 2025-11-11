@@ -1734,7 +1734,7 @@ $$('#pFormations button[data-form]').forEach(btn=>{
     setInterval(()=>{ overlay.style.display = (st.modoAlumno && st.radarFailNet) ? 'flex' : 'none'; }, 200);
   }catch(e){ console.warn('Falla Radar overlay patch:', e); }
 
-// ===== Pinch-zoom táctil nativo (2 dedos) =====
+  // ===== Pinch-zoom táctil nativo centrado en el punto medio =====
 (function(){
   const cvs = document.getElementById('radar');
   if(!cvs) return;
@@ -1748,10 +1748,33 @@ $$('#pFormations button[data-form]').forEach(btn=>{
     return Math.hypot(dx, dy);
   }
 
+  function mid(e){
+    return {
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+    };
+  }
+
   cvs.addEventListener('touchstart', (e)=>{
     if(e.touches.length === 2){
       e.preventDefault();
-      pinch = {d0: dist(e), z0: zoom};
+      const m = mid(e);
+      const rect = cvs.getBoundingClientRect();
+
+      // Centro inicial del gesto en coordenadas del mundo
+      const mx = m.x - rect.left;
+      const my = m.y - rect.top;
+      const worldX = (mx - CX - offX) / (zoom * PX_PER_NM);
+      const worldY = (my - CY - offY) / (zoom * PX_PER_NM);
+
+      pinch = {
+        d0: dist(e),
+        z0: zoom,
+        worldX,
+        worldY,
+        screenX: mx,
+        screenY: my
+      };
     }
   }, {passive:false});
 
@@ -1759,7 +1782,21 @@ $$('#pFormations button[data-form]').forEach(btn=>{
     if(pinch && e.touches.length === 2){
       e.preventDefault();
       const scale = dist(e) / pinch.d0;
-      zoom = Math.min(MAX_Z, Math.max(MIN_Z, pinch.z0 * scale));
+      const newZoom = Math.min(MAX_Z, Math.max(MIN_Z, pinch.z0 * scale));
+
+      // Mantiene el punto medio fijo durante el zoom
+      const m = mid(e);
+      const rect = cvs.getBoundingClientRect();
+      const mx = m.x - rect.left;
+      const my = m.y - rect.top;
+
+      const newScreenX = pinch.worldX * newZoom * PX_PER_NM + CX + offX;
+      const newScreenY = pinch.worldY * newZoom * PX_PER_NM + CY + offY;
+
+      offX -= (newScreenX - mx);
+      offY -= (newScreenY - my);
+
+      zoom = newZoom;
     }
   }, {passive:false});
 
@@ -1767,7 +1804,7 @@ $$('#pFormations button[data-form]').forEach(btn=>{
     pinch = null;
   }, {passive:true});
 })();
-  
+
   // Missile sync: call scheduleSync after launch
   try{
     const origLaunch = window.launch;
