@@ -753,22 +753,38 @@ const timerEl=$('#timer'),stateChip=$('#stateChip'),fpsEl=$('#fps'),simStateEl=$
 function tickTimer(){const now=new Date();const s=String(now.getSeconds()).padStart(2,'0');const m=String(now.getMinutes()).padStart(2,'0');const h=String(now.getHours()).padStart(2,'0');const d=String(now.getDate()).padStart(2,'0');const mo=String(now.getMonth()+1).padStart(2,'0');const y=now.getFullYear();timerEl.textContent=`${d}-${mo}-${y} ${h}:${m}:${s}`;}
 setInterval(tickTimer,1000);tickTimer();
 
-/* ===== Zoom ultra preciso y extendido de rueda de mouse (suave) ===== */
-const MIN_Z = 0.02, MAX_Z = 15; // más alcance de acercamiento
+/* ===== Zoom ultra preciso centrado en el puntero ===== */
+const MIN_Z = 0.02, MAX_Z = 15; // límites de zoom
 cvs.addEventListener('wheel', e => {
   e.preventDefault();
 
-  // Base muy fina (más cerca a 1 => más suave)
-  const BASE = 1.01;
-
-  // Normaliza deltaY y calcula un factor exponencial suave:
-  // deltaY < 0 => f > 1 (acerca), deltaY > 0 => f < 1 (aleja)
+  const BASE = 1.01; // suavidad base
   const dy = Math.max(-240, Math.min(240, e.deltaY || 0));
-  const f = Math.pow(BASE, -dy / 100);
+  const f = Math.pow(BASE, -dy / 100); // factor de escala suave
 
-  // Aplica y limita
-  zoom = Math.min(MAX_Z, Math.max(MIN_Z, zoom * f));
+  const newZoom = Math.min(MAX_Z, Math.max(MIN_Z, zoom * f));
+
+  // === Mantener el punto bajo el mouse fijo ===
+  const rect = cvs.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // Coordenadas del mouse en espacio del mundo antes del zoom
+  const worldX = (mx - CX - offX) / (zoom * PX_PER_NM);
+  const worldY = (my - CY - offY) / (zoom * PX_PER_NM);
+
+  // Cambiar el zoom
+  zoom = newZoom;
+
+  // Recalcular offset para que ese punto se mantenga en pantalla
+  const newScreenX = worldX * zoom * PX_PER_NM + CX + offX;
+  const newScreenY = worldY * zoom * PX_PER_NM + CY + offY;
+
+  offX -= (newScreenX - mx);
+  offY -= (newScreenY - my);
+
 }, { passive: false });
+
 
   
 /* ===== Pan con botón derecho ===== */
