@@ -2694,6 +2694,72 @@ document.getElementById('radar').addEventListener('click', function(e){
 })();
 </script>
 
+<script>
+/* === PATCH: Exportar / Importar Formaciones === */
+(function(){
+  // Crear botones
+  const panel = document.querySelector('#pFormations .panel-body');
+  if(!panel) return;
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `
+    <button id="exportFormBtn" class="btn mini focusable">💾 Exportar</button>
+    <button id="importFormBtn" class="btn mini focusable">📂 Cargar</button>
+    <input type="file" id="formFileInput" accept=".json" style="display:none">
+  `;
+  panel.appendChild(row);
+
+  // === EXPORTAR ===
+  document.getElementById('exportFormBtn').onclick = ()=>{
+    if(!window.st || !Array.isArray(st.planes) || st.planes.length===0){
+      alert('No hay formaciones para exportar.');
+      return;
+    }
+    const data = {
+      version: 'SETCA-Form-1.0',
+      timestamp: new Date().toISOString(),
+      planes: st.planes,
+      roles: st.roles
+    };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `formaciones_${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+    a.click();
+  };
+
+  // === IMPORTAR ===
+  document.getElementById('importFormBtn').onclick = ()=>{
+    document.getElementById('formFileInput').click();
+  };
+
+  document.getElementById('formFileInput').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const data = JSON.parse(ev.target.result);
+        if(!data.planes) throw new Error('Archivo inválido');
+        // Limpia los actuales y carga los nuevos
+        st.planes = data.planes;
+        st.roles = data.roles || {};
+        repaintPlanesList && repaintPlanesList();
+        repaintNav && repaintNav();
+        repaintAlt && repaintAlt();
+        repaintPairs && repaintPairs();
+        alert('Formaciones cargadas correctamente.');
+      }catch(err){
+        alert('Error al cargar el archivo: '+err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+})();
+</script>
+
+  
 </body>
 </html>
-by wallace
+                                                                    by wallace
+
