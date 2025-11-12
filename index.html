@@ -2757,8 +2757,92 @@ document.getElementById('radar').addEventListener('click', function(e){
   });
 })();
 </script>
+<!-- === PARCHE: Botones de aviones más pequeños + selección amarilla === -->
+<style>
+  /* Cuadros más pequeños (para que entren más en pantalla) */
+  #planeList {
+    display: grid !important;
+    grid-template-columns: repeat(6, 34px) !important; /* 6 por fila */
+    grid-auto-rows: 34px !important;
+    gap: 5px !important;
+    justify-content: start !important;
+    align-content: start !important;
+    padding: 4px !important;
+  }
 
-  
+  /* Estilo base de los botones (cuadros) */
+  #planeList button {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 9px !important;
+    line-height: 34px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    text-align: center !important;
+    border-radius: 6px !important;
+    border: 1px solid #2a6 !important;
+    background: #0e2b17 !important;
+    color: var(--txt) !important;
+    transition: background 0.2s, border-color 0.2s;
+    cursor: pointer !important;
+  }
+
+  /* Cuando un botón esté seleccionado */
+  #planeList button.active {
+    background: #ffe066 !important; /* Amarillo */
+    border-color: #ffd700 !important;
+    color: #000 !important;
+  }
+
+  /* Controles del botón "Etiqueta" (mantengo igual) */
+  #tagControlWrap {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 6px;
+  }
+
+  #tagNudge {
+    background: #102a18;
+    border: 1px solid #2a6;
+    color: var(--txt);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  #tagNudge:hover {
+    background: #164f2b;
+  }
+
+  #tagPos {
+    font: 12px monospace;
+    color: var(--mut);
+    padding: 2px 6px;
+    border: 1px solid #2a6;
+    border-radius: 6px;
+    background: #0a110b;
+  }
+</style>
+
+<script>
+/* === Parche funcional de selección/deselección amarilla en botones === */
+(function(){
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const lista = document.getElementById('planeList');
+    if(!lista) return;
+
+    lista.addEventListener('click', (ev)=>{
+      const btn = ev.target.closest('button');
+      if(!btn) return;
+      btn.classList.toggle('active'); // cambia entre normal y amarillo
+    });
+  });
+})();
+</script>
+<!-- === /PARCHE === -->  
 </body>
 </html>
                                                                     by wallace
