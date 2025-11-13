@@ -1005,7 +1005,7 @@ let draggingPlane=null,draggingDrawing=null,dragStart=null;
 cvs.addEventListener('mousedown',e=>{
   if(e.button!==0 || !e.altKey) return;
   const r=cvs.getBoundingClientRect();const wx=toWorld(e.clientX-r.left,e.clientY-r.top).x;const wy=toWorld(e.clientX-r.left,e.clientY-r.top).y;
-  const hit=pickShape(wx,wy); if(hit){st.selectedDrawing=hit;draggingDrawing=st.drawings.find(d=>d.id===hit);dragStart={x:e.clientX,y:e.clientY};return;}
+  const hit=null; // ALT: solo mover aeronaves, no dibujos if(hit){st.selectedDrawing=hit;draggingDrawing=st.drawings.find(d=>d.id===hit);dragStart={x:e.clientX,y:e.clientY};return;}
   let best=null,bd=1e9;st.planes.forEach(p=>{const d=Math.hypot(wx-p.x,wy-p.y);if(d<15/zoom && d<bd){bd=d;best=p;}});
   if(best){draggingPlane=best;dragStart={x:e.clientX,y:e.clientY};}
 });
@@ -2717,7 +2717,8 @@ document.getElementById('radar').addEventListener('click', function(e){
       version: 'SETCA-Form-1.0',
       timestamp: new Date().toISOString(),
       planes: st.planes,
-      roles: st.roles
+      roles: st.roles,
+      drawings: st.drawings
     };
     const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
     const a = document.createElement('a');
@@ -2742,6 +2743,7 @@ document.getElementById('radar').addEventListener('click', function(e){
         // Limpia los actuales y carga los nuevos
         st.planes = data.planes;
         st.roles = data.roles || {};
+        st.drawings = data.drawings || [];
         repaintPlanesList && repaintPlanesList();
         repaintNav && repaintNav();
         repaintAlt && repaintAlt();
@@ -2843,4 +2845,4 @@ document.getElementById('radar').addEventListener('click', function(e){
 <!-- === /PARCHE === -->  
 </body>
 </html>
-                                                                    by W A L L A C E 
+B Y     W   A   L   L   A   C   E
