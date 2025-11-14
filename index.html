@@ -50,12 +50,7 @@ document.getElementById('cancelDelete').onclick = ()=>{
     return h || "sala-default";
   }
   const ROOM_ID = getRoomId();
-// expose
-globalThis.SETCA_ROOM_ID=ROOM_ID;
-globalThis.SETCA_DB=db;
-globalThis.SETCA_REF=ref;
-globalThis.SETCA_ONVALUE=onValue;
-const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
+  const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
   let currentUID = null;
 
   signInAnonymously(auth).catch(console.error);
@@ -73,7 +68,7 @@ const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
       planes: local.planes,
       roles: local.roles,
       drawings: local.drawings,
-      // pairs: local.pairs,
+      pairs: local.pairs,
       mode: local.mode,
       metric: local.metric,
       altUnit: local.altUnit,
@@ -91,7 +86,7 @@ const stateRef = ref(db, `rooms/${ROOM_ID}/state`);
       if (Array.isArray(v.planes)) st.planes = v.planes;
       else if (v.planes && typeof v.planes === "object") st.planes = Object.values(v.planes);
       if (v.roles) st.roles = v.roles;
-      // if (v.pairs) st.pairs = v.pairs;
+      if (v.pairs) st.pairs = v.pairs;
       if (v.drawings) st.drawings = v.drawings;
       if (v.mode) st.mode = v.mode;if (typeof v.metric === "boolean") st.metric = v.metric;
       if (v.altUnit) st.altUnit = v.altUnit;
@@ -168,7 +163,7 @@ const app = initializeApp(firebaseConfig);
       planes: local.planes,
       roles: local.roles,
       drawings: local.drawings,
-      // pairs: local.pairs,
+      pairs: local.pairs,
       mode: local.mode,
       metric: local.metric,
       altUnit: local.altUnit,
@@ -413,6 +408,7 @@ canvas#radar {
 
   <button id="start" style="display:none" class="btn focusable">▶️ Iniciar</button>
   <button id="pause" class="btn focusable">⏸️ Pausar</button>
+  <button id="toggleLabels" class="btn focusable">📝 Etiquetas</button>
   <button id="reportBtn" class="btn focusable">📝 Reporte Táctico</button>
 
   <button
@@ -574,7 +570,7 @@ const INIT_PLANES=[
   {name:'R2',id:'R2',x:30,y:0, hdg:45, spd:450, tgtSpd:450, alt:21000, tgtAlt:21000, turn:2, tgtHdg:45, ghosts:[], lastDet:0, fail:{comms:false,eng:'none',cab:'none',gear:false,bird:false}, kills:0, fuel:100, jamming:false},
   {name:'R3',id:'R3',x:0,y:-40,hdg:90, spd:500, tgtSpd:500, alt:22000, tgtAlt:22000, turn:2.5,tgtHdg:90, ghosts:[], lastDet:0, fail:{comms:false,eng:'none',cab:'none',gear:false,bird:false}, kills:0, fuel:100, jamming:false},
 ];
-let st={
+let st={ showLabels:true,
   planes: [],
   roles: {R1:'Friend',R2:'Bandit',R3:'Friend'},
   sel: [],
@@ -855,11 +851,11 @@ function drawPlane(p){
   const lr=(p.hdg-90)*Math.PI/180;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(s.x+Math.cos(lr)*25,s.y+Math.sin(lr)*25);ctx.strokeStyle='#35ff79';ctx.lineWidth=1;ctx.stroke();
   if(st.predMin>0){const t=st.predMin*60,nmps=(p.spd/NM2KM)/3600;const d=nmps*t;const ex=p.x+Math.cos(lr)*d,ey=p.y+Math.sin(lr)*d;const se=toScreen(ex,ey);ctx.setLineDash([5,5]);ctx.strokeStyle='#2ee74f';ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(se.x,se.y);ctx.stroke();ctx.setLineDash([]);}
   ctx.fillStyle='#eaffea';ctx.font='12px monospace';ctx.textAlign='left';
-  ctx.fillText(p.name,s.x+12,s.y-6);
+  if(st.showLabels) ctx.fillText(p.name,s.x+12,s.y-6);
   if(st.metric){ctx.fillText(`${(p.alt*FT2M|0)} m`,s.x+12,s.y+8);ctx.fillText(`${p.spd.toFixed(0)} km/h`,s.x+12,s.y+22);
-      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);}
-  else {ctx.fillText(`${p.alt|0} ft`,s.x+12,s.y+8);ctx.fillText(`${(p.spd*KMH2KTS).toFixed(0)} kts`,s.x+12,s.y+22);
-      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);}
+      if(st.showLabels) ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);}
+  else {if(st.showLabels) ctx.fillText(`${p.alt|0} ft`,s.x+12,s.y+8);if(st.showLabels) ctx.fillText(`${(p.spd*KMH2KTS).toFixed(0)} kts`,s.x+12,s.y+22);
+      if(st.showLabels) ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);}
   if(st.sel.includes(p.id)){ctx.strokeStyle='#ffe066';ctx.strokeRect(s.x-10,s.y-10,20,20);}
   if(p.jamming){
     const t=(performance.now()%1000)/1000;const r=10+8*Math.sin(t*2*Math.PI);
@@ -2849,37 +2845,13 @@ document.getElementById('radar').addEventListener('click', function(e){
 </script>
 <!-- === /PARCHE === -->  
 
-<style>
-#connBox{
-  position:fixed;
-  top:10px;
-  right:10px;
-  background:rgba(0,0,0,.55);
-  border:1px solid #2a6;
-  border-radius:6px;
-  padding:6px 10px;
-  font-family:monospace;
-  font-size:13px;
-  color:#aaffaa;
-  z-index:9999;
-}
-</style>
-<div id="connBox">Conectados: 1</div>
 <script>
-function startPresenceCounter(){
-  if(!globalThis.SETCA_DB){
-    return setTimeout(startPresenceCounter,300);
-  }
-  const ROOM=globalThis.SETCA_ROOM_ID;
-  const pres=globalThis.SETCA_REF(globalThis.SETCA_DB,`rooms/${ROOM}/presence`);
-  globalThis.SETCA_ONVALUE(pres,snap=>{
-    const v=snap.val()||{};
-    document.getElementById('connBox').textContent='Conectados: '+Object.keys(v).length;
-  });
-}
-startPresenceCounter();
+document.getElementById('toggleLabels').onclick=()=>{
+  st.showLabels = !st.showLabels;
+  document.getElementById('toggleLabels').classList.toggle('hi', st.showLabels);
+};
 </script>
 
 </body>
 </html>
-B Y     W   A   L   L   A   C   E
+B Y   / /   W   A   L   L   A   C   E  / / 
