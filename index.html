@@ -1713,6 +1713,19 @@ $$('#pFormations button[data-form]').forEach(btn=>{
       alumnoBtn.id = 'alumnoBtn';
       alumnoBtn.textContent = '🎯 Alumno';
       hdr.appendChild(alumnoBtn);
+      // Botón de Salas
+      let salasBtn = document.getElementById('salasBtn');
+      if(!salasBtn){
+        salasBtn = document.createElement('button');
+        salasBtn.id = 'salasBtn';
+        salasBtn.textContent = '📡 Salas';
+        hdr.appendChild(salasBtn);
+      }
+      salasBtn.addEventListener('click', ()=>{
+        if(window.setcaRooms && typeof window.setcaRooms.open==='function'){
+          window.setcaRooms.open();
+        }
+      });
     }
     const toHide = ['#pCmd','#pPlanes','#pNav','#pFormations','#pDraw'];
     alumnoBtn.addEventListener('click', ()=>{
@@ -2877,6 +2890,239 @@ document.getElementById('radar').addEventListener('click', function(e){
 })();
 </script>
 <!-- === /PARCHE === -->  
+
+
+<!-- ROOMS MODAL -->
+<div id="roomsModal" class="rooms-hidden">
+  <div class="rooms-backdrop"></div>
+  <div class="rooms-dialog">
+    <h3>Salas de entrenamiento</h3>
+    <div id="roomsCurrent" style="margin-bottom:6px;font-size:13px;"></div>
+    <div class="rooms-row" style="margin-bottom:8px;">
+      <label for="roomsUsername" style="margin-right:4px;">Tu indicativo:</label>
+      <input id="roomsUsername" placeholder="Ej: Oso" style="width:130px;">
+      <button id="roomsSaveName">Guardar</button>
+    </div>
+    <div id="roomsList"></div>
+    <div style="text-align:right;margin-top:8px;">
+      <button id="roomsClose">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<style>
+#roomsModal{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+#roomsModal.rooms-open{ display:flex; }
+#roomsModal .rooms-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+}
+#roomsModal .rooms-dialog{
+  position:relative;
+  background:#111;
+  color:#eee;
+  padding:10px 14px;
+  border-radius:8px;
+  min-width:260px;
+  max-width:420px;
+  max-height:80vh;
+  overflow:auto;
+  box-shadow:0 0 10px #000;
+  font-family:monospace;
+  font-size:13px;
+}
+#roomsList .room-row{
+  padding:4px 0;
+  border-bottom:1px solid #333;
+  cursor:pointer;
+}
+#roomsList .room-row:hover{
+  background:#181818;
+}
+#roomsList .room-name{
+  font-weight:bold;
+}
+#roomsList small{
+  display:block;
+  font-size:11px;
+  color:#8f8;
+}
+</style>
+
+<script type="module">
+import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+
+const db = getDatabase();
+const auth = getAuth();
+
+const salas = ["alfa","bravo","charlie","delta","eco","foxtrot","golf","hotel","india","juliet"];
+
+function getRoomId(){
+  const h = (location.hash || "").replace(/^#/,"").trim();
+  return h || "sala-default";
+}
+let currentRoom = getRoomId();
+
+let username = localStorage.getItem("setca_username") || "sinNombre";
+
+const modal = document.getElementById("roomsModal");
+const roomsCurrent = document.getElementById("roomsCurrent");
+const roomsList = document.getElementById("roomsList");
+const usernameInput = document.getElementById("roomsUsername");
+const saveNameBtn = document.getElementById("roomsSaveName");
+const closeBtn = document.getElementById("roomsClose");
+
+if(usernameInput){ usernameInput.value = username; }
+
+function refreshCurrent(){
+  if(roomsCurrent){
+    roomsCurrent.textContent = "Sala actual: " + String(currentRoom||"sala-default").toUpperCase();
+  }
+  const salasBtn = document.getElementById("salasBtn");
+  if(salasBtn){
+    salasBtn.title = "Sala actual: " + String(currentRoom||"sala-default").toUpperCase();
+  }
+}
+
+function openModal(){
+  if(!modal) return;
+  refreshCurrent();
+  modal.classList.add("rooms-open");
+}
+function closeModal(){
+  if(!modal) return;
+  modal.classList.remove("rooms-open");
+}
+
+if(closeBtn){
+  closeBtn.addEventListener("click", closeModal);
+}
+if(modal){
+  modal.addEventListener("click", (e)=>{
+    if(e.target === modal || (e.target && e.target.classList && e.target.classList.contains("rooms-backdrop"))){
+      closeModal();
+    }
+  });
+}
+if(saveNameBtn){
+  saveNameBtn.addEventListener("click", ()=>{
+    username = usernameInput.value || "sinNombre";
+    localStorage.setItem("setca_username", username);
+  });
+}
+
+// Exponer API global para que el botón de Salas lo pueda abrir
+window.setcaRooms = {
+  open: openModal,
+  close: closeModal
+};
+
+let uid = null;
+signInAnonymously(auth).catch(console.error);
+onAuthStateChanged(auth, u=>{
+  if(!u) return;
+  uid = u.uid;
+  startPresence();
+});
+
+function startPresence(){
+  // Escuchar lista de usuarios por sala
+  salas.forEach(sala=>{
+    const uRef = ref(db, `rooms/${sala}/users`);
+    onValue(uRef, snap=>{
+      const val = snap.val() || {};
+      const entries = Object.values(val);
+      const names = entries.map(v => (v && v.name) ? v.name : "sinNombre");
+      const count = names.length;
+      const rowId = "room-row-" + sala;
+      let row = document.getElementById(rowId);
+      if(!row){
+        row = document.createElement("div");
+        row.id = rowId;
+        row.className = "room-row";
+        row.onclick = ()=>chooseRoom(sala);
+        roomsList.appendChild(row);
+      }
+      const label = sala.toUpperCase() + ": " + count + " conectados";
+      const namesHtml = names.length ? `<small>${names.map(n => `${n} <button class='kick-user' data-user='${n}' style='font-size:10px;'>-</button>`).join('<br>')}</small>` : "";
+      row.innerHTML = `<span class="room-name">${label}</span>${namesHtml}`;
+    });
+  });
+
+  // Heartbeat de presencia en la sala actual
+  setInterval(()=>{
+    if(!uid) return;
+    const nameToUse = (usernameInput && usernameInput.value) ? usernameInput.value : username;
+    username = nameToUse || username;
+    localStorage.setItem("setca_username", username);
+    const meRef = ref(db, `rooms/${currentRoom}/users/${uid}`);
+    set(meRef, { name: username, t: Date.now() });
+  }, 5000);
+
+  refreshCurrent();
+}
+
+
+// EXIT BUTTON HANDLER
+document.addEventListener("click", (e)=>{
+  if(e.target && e.target.classList.contains("rooms-exit")){
+    const sala = e.target.getAttribute("data-sala");
+    if(uid && sala){
+      const userRef = ref(db, `rooms/${sala}/users/${uid}`);
+      set(userRef, null);
+    }
+    e.stopPropagation();
+  }
+});
+
+// Kick user handler
+document.addEventListener("click", (e)=>{
+  if(e.target && e.target.classList.contains("kick-user")){
+    const name = e.target.getAttribute("data-user");
+    // remove from current room
+    salas.forEach(s=>{
+      const uRef = ref(db, `rooms/${s}/users`);
+      onValue(uRef, snap=>{
+        const val = snap.val()||{};
+        for(const uid2 in val){
+          if(val[uid2].name === name){
+            // move to default
+            set(ref(db, `rooms/${s}/users/${uid2}`), null);
+            set(ref(db, `rooms/sala-default/users/${uid2}`), {name:name, t:Date.now()});
+          }
+        }
+      }, {onlyOnce:true});
+    });
+    e.stopPropagation();
+  }
+});
+function chooseRoom(sala){
+  const prevRoom = currentRoom;
+if(sala === currentRoom) return;
+  currentRoom = sala;
+  // cambiar hash para que TODO el simulador use esa sala
+  location.hash = "#" + sala;
+  
+  // REMOVE USER FROM PREVIOUS ROOM
+  if(uid){
+    const oldRef = ref(db, `rooms/${prevRoom}/users/${uid}`);
+    set(oldRef, null);
+  }
+  location.reload();
+
+}
+</script>
+
+
 </body>
 </html>
 B Y     W   A   L   L   A   C   E // v2
