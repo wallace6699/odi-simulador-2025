@@ -67,8 +67,7 @@ document.getElementById('cancelDelete').onclick = ()=>{
     const payload = {
       planes: local.planes,
       roles: local.roles,
-      drawings: local.drawings,
-      pairs: local.pairs,
+      drawings: local.drawings, 
       mode: local.mode,
       metric: local.metric,
       altUnit: local.altUnit,
@@ -85,8 +84,7 @@ document.getElementById('cancelDelete').onclick = ()=>{
     try {
       if (Array.isArray(v.planes)) st.planes = v.planes;
       else if (v.planes && typeof v.planes === "object") st.planes = Object.values(v.planes);
-      if (v.roles) st.roles = v.roles;
-      if (v.pairs) st.pairs = v.pairs;
+      if (v.roles) st.roles = v.roles; 
       if (v.drawings) st.drawings = v.drawings;
       if (v.mode) st.mode = v.mode;if (typeof v.metric === "boolean") st.metric = v.metric;
       if (v.altUnit) st.altUnit = v.altUnit;
@@ -162,8 +160,7 @@ const app = initializeApp(firebaseConfig);
     const payload = {
       planes: local.planes,
       roles: local.roles,
-      drawings: local.drawings,
-      pairs: local.pairs,
+      drawings: local.drawings, 
       mode: local.mode,
       metric: local.metric,
       altUnit: local.altUnit,
@@ -399,6 +396,23 @@ canvas#radar {
   color: #000000 !important;
 }
 
+
+#modeDigital { display:none !important; }
+
+/* Compact CMD buttons */
+#pCmdBody .btn.mini {
+  padding:2px 6px !important;
+  font-size:11px !important;
+  min-width:60px !important;
+}
+#pCmdBody input {
+  height:20px !important;
+}
+.btn:active, .btn.btn-hold {
+  background: yellow !important;
+  color:black !important;
+}
+
 </style>
 </head>
 <body>
@@ -434,8 +448,8 @@ canvas#radar {
         </div>
         <div class="row">
           <span class="chip">Viento</span>
-          <span class="mini">Vel</span><input id="windSpd" class="ghost focusable" type="number" value="0" style="width:100px">
-          <span class="mini">Dir</span><input id="windDir" class="ghost focusable" type="number" value="0" style="width:90px">
+          <span class="mini">Vel</span><input id="windSpd" class="ghost focusable" type="number" value="0" style="width:55px">
+          <span class="mini">Dir</span><input id="windDir" class="ghost focusable" type="number" value="0" style="width:55px">
         </div>
         <div class="row">
           <button id="failRadar" class="btn mini focusable">Falla Radar</button>
@@ -474,13 +488,7 @@ canvas#radar {
   </main>
 
   <aside id="right">
-    <section class="panel" id="pStudent">
-      <div class="panel-header"><h3>Vista Alumno</h3><span class="toggle" data-target="#pStudentBody">▾</span></div>
-      <div id="pStudentBody" class="panel-body">
-        <!-- Botones retirados en v4; solo info -->
-        <div id="studentInfo" class="card mini">Selecciona aviones (Instructor).</div>
-      </div>
-    </section>
+    
 
     <section class="panel" id="pPair">
       <div class="panel-header"><h3>Emparejamientos</h3><span class="toggle" data-target="#pPairBody">▾</span></div>
@@ -942,6 +950,35 @@ function updatePairs(){
     pr.dNM=dNM; pr.dKM=dKM; pr.rel=ang; pr.dAlt=B.alt-A.alt;
   });
 }
+
+/* === ASPECT ANGLE 360° SYSTEM === */
+function computeAspectAngle360(interceptor, target){
+  const dx = interceptor.x - target.x;
+  const dy = interceptor.y - target.y;
+  let ang = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+  ang = (ang - target.hdg + 360) % 360;
+  return ang;
+}
+function classifyAspectSector360(AA){
+  if (AA >= 340 || AA < 20) return "HOT";
+  if (AA >= 300 && AA < 340) return "FLANK LEFT";
+  if (AA >= 20 && AA < 60) return "FLANK RIGHT";
+  if (AA >= 240 && AA < 300) return "BEAM LEFT";
+  if (AA >= 60 && AA < 120) return "BEAM RIGHT";
+  if (AA >= 120 && AA < 240) return "COLD";
+  return "UNKNOWN";
+}
+function getAspectCode(sector){
+  switch(sector){
+    case "HOT": return "(H)";
+    case "FLANK LEFT": return "(FL)";
+    case "FLANK RIGHT": return "(FR)";
+    case "BEAM LEFT": return "(BL)";
+    case "BEAM RIGHT": return "(BR)";
+    case "COLD": return "(C)";
+  }
+  return "(?)";
+}
 function drawPairs(){
   st.pairs.forEach(pr=>{
     const A=st.planes.find(p=>p.id===pr.a),B=st.planes.find(p=>p.id===pr.b); if(!A||!B) return;
@@ -960,7 +997,17 @@ function drawPairs(){
       const updown = pr.dAlt>0 ? 'UP' : (pr.dAlt<0 ? 'DOWN' : 'LVL');
       const distVal = st.metric ? pr.dKM : pr.dNM;
       const snapMode = st.metric ? (pr.dKM<=15) : (pr.dNM<=8); // ~15km ≈ 8nm
-      const txt = snapMode ? `${clock} / ${dist} / ${updown}` : `${brg} / ${dist} / ${BALT} / ${DALT}`;
+      const snapDistNM = st.metric ? (15/NM2KM) : 15; // 15 km or equivalent NM
+const snapActive = pr.dNM <= snapDistNM;
+// SNAP info = CLOCK / DIST / UP-DOWN
+const snapClock = clock;
+const snapDistTxt = dist;
+const snapUD = updown;
+let snapInfo = snapActive ? `${snapClock} / ${snapDistTxt} / ${snapUD}` : 'NY';
+const AA = computeAspectAngle360(B, A);
+      const sector = classifyAspectSector360(AA);
+      const code = getAspectCode(sector);
+      const txt = `${brg} / ${dist} / ${BALT} / ${code}  SNAP (${snapInfo})`;
     ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(midX-95,midY-10,190,20);
     ctx.fillStyle='#eaffea';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(txt,midX,midY+5);
   });
@@ -978,37 +1025,159 @@ function repaintPairList(){
 }
 
 /* ===== Dibujo ===== */
+
 const tool={tool:'none',drawing:false,a:null,b:null};
+
 function drawShapes(){
   st.drawings.forEach(d=>{
-    ctx.save();ctx.strokeStyle=d.color||'#2ee74f';ctx.fillStyle=d.color||'#2ee74f';ctx.lineWidth=(d.id===st.selectedDrawing?3:2);
-    const s=toScreen(d.x,d.y);
-    if(d.type==='bullseye'){[4,8,12].forEach(r=>{ctx.beginPath();ctx.arc(s.x,s.y,r,0,2*Math.PI);ctx.stroke();});ctx.beginPath();ctx.moveTo(s.x-12,s.y);ctx.lineTo(s.x+12,s.y);ctx.moveTo(s.x,s.y-12);ctx.lineTo(s.x,s.y+12);ctx.stroke(); if(d.name){ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(d.name,s.x,s.y-16);}}
-    if(d.type==='point'){ctx.beginPath();ctx.arc(s.x,s.y,5,0,2*Math.PI);ctx.fill(); if(d.name){ctx.font='11px monospace';ctx.textAlign='left';ctx.fillText(d.name,s.x+8,s.y);}}
-    if(d.type==='line'){const e=toScreen(d.ex,d.ey);ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(e.x,e.y);ctx.stroke();}
-    if(d.type==='circle'){ctx.beginPath();ctx.arc(s.x,s.y,d.r*zoom*PX_PER_NM,0,2*Math.PI);ctx.stroke();}
-    if(d.type==='square'){const a=d.a*zoom*PX_PER_NM;ctx.strokeRect(s.x-a/2,s.y-a/2,a,a);}
-    if(d.type==='label'){ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor='#001500';ctx.shadowBlur=6;ctx.fillText(d.text,s.x,s.y);ctx.shadowBlur=0;}
+    ctx.save();
+
+    // === NUEVO: color militar amarillo ===
+    ctx.strokeStyle = d.color || '#ffea00';
+    ctx.fillStyle   = d.color || '#ffea00';
+
+    // === NUEVO: líneas más delgadas estilo radar militar ===
+    ctx.lineWidth = (d.id === st.selectedDrawing ? 1.0 : 0.6);
+
+    const s = toScreen(d.x, d.y);
+
+    // --- BULLSEYE ---
+    if(d.type === 'bullseye'){
+      [4,8,12].forEach(r=>{
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r, 0, 2*Math.PI);
+        ctx.stroke();
+      });
+
+      ctx.beginPath();
+      ctx.moveTo(s.x - 12, s.y);
+      ctx.lineTo(s.x + 12, s.y);
+      ctx.moveTo(s.x, s.y - 12);
+      ctx.lineTo(s.x, s.y + 12);
+      ctx.stroke();
+
+      if(d.name){
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(d.name, s.x, s.y - 16);
+      }
+    }
+
+    // --- PUNTO ---
+    if(d.type === 'point'){
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 4, 0, 2*Math.PI); // MÁS MILITAR Y COMPACTO
+      ctx.fill();
+      if(d.name){
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(d.name, s.x + 8, s.y);
+      }
+    }
+
+    // --- LÍNEA ---
+    if(d.type === 'line'){
+      const e = toScreen(d.ex, d.ey);
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(e.x, e.y);
+      ctx.stroke();
+    }
+
+    // --- CÍRCULO ---
+    if(d.type === 'circle'){
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, d.r * zoom * PX_PER_NM, 0, 2*Math.PI);
+      ctx.stroke();
+    }
+
+    // --- CUADRADO ---
+    if(d.type === 'square'){
+      const a = d.a * zoom * PX_PER_NM;
+      ctx.strokeRect(s.x - a/2, s.y - a/2, a, a);
+    }
+
+    // --- LABEL ---
+    if(d.type === 'label'){
+      ctx.font = 'bold 14px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = '#221a00';
+      ctx.shadowBlur = 5;
+      ctx.fillText(d.text, s.x, s.y);
+      ctx.shadowBlur = 0;
+    }
+
     ctx.restore();
   });
-  if(tool.drawing&&tool.a&&tool.b){
-    ctx.save();ctx.strokeStyle='#2ee74f';ctx.setLineDash([4,4]);
-    const s=toScreen(tool.a.x,tool.a.y),e=toScreen(tool.b.x,tool.b.y);
-    if(tool.tool==='line'){ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(e.x,e.y);ctx.stroke();}
-    if(tool.tool==='circle'){const r=Math.hypot(tool.b.x-tool.a.x,tool.b.y-tool.a.y)*zoom*PX_PER_NM;ctx.beginPath();ctx.arc(s.x,s.y,r,0,2*Math.PI);ctx.stroke();}
-    if(tool.tool==='square'){const side=Math.max(Math.abs(tool.b.x-tool.a.x),Math.abs(tool.b.y-tool.a.y));const cx=tool.a.x+(tool.b.x-tool.a.x)/2,cy=tool.a.y+(tool.b.y-tool.a.y)/2;const c=toScreen(cx,cy);const a=side*zoom*PX_PER_NM;ctx.strokeRect(c.x-a/2,c.y-a/2,a,a);}
+
+  // === DIBUJO TEMPORAL (líneas punteadas) ===
+  if(tool.drawing && tool.a && tool.b){
+    ctx.save();
+
+    // amarillo militar
+    ctx.strokeStyle = '#ffea00';
+    ctx.setLineDash([4,4]);
+
+    // más delgado aún (estilo previsualización)
+    ctx.lineWidth = 0.6;
+
+    const s = toScreen(tool.a.x, tool.a.y);
+    const e = toScreen(tool.b.x, tool.b.y);
+
+    if(tool.tool === 'line'){
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(e.x, e.y);
+      ctx.stroke();
+    }
+
+    if(tool.tool === 'circle'){
+      const r = Math.hypot(tool.b.x - tool.a.x, tool.b.y - tool.a.y) * zoom * PX_PER_NM;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, 2*Math.PI);
+      ctx.stroke();
+    }
+
+    if(tool.tool === 'square'){
+      const side = Math.max(Math.abs(tool.b.x - tool.a.x), Math.abs(tool.b.y - tool.a.y));
+      const cx = tool.a.x + (tool.b.x - tool.a.x)/2;
+      const cy = tool.a.y + (tool.b.y - tool.a.y)/2;
+      const c  = toScreen(cx, cy);
+      const a  = side * zoom * PX_PER_NM;
+      ctx.strokeRect(c.x - a/2, c.y - a/2, a, a);
+    }
+
     ctx.restore();
   }
 }
-function pickShape(wx,wy){
-  const tol=10/(zoom*PX_PER_NM);
-  for(let i=st.drawings.length-1;i>=0;i--){
-    const d=st.drawings[i];
-    if(d.type==='line'){const dx=d.ex-d.x,dy=d.ey-d.y;if(dx===0&&dy===0) continue;const t=((wx-d.x)*dx+(wy-d.y)*dy)/(dx*dx+dy*dy);if(t>=0&&t<=1){const dd=Math.hypot(wx-(d.x+t*dx),wy-(d.y+t*dy));if(dd<tol) return d.id;}}
-    else{const hr=d.type==='circle'?d.r:(d.type==='label'?(20/zoom):(d.type==='bullseye'?(12/zoom):tol)); if(Math.hypot(wx-d.x,wy-d.y)<hr+tol) return d.id;}
+
+
+function pickShape(wx, wy){
+  const tol = 10/(zoom*PX_PER_NM);
+  for(let i = st.drawings.length - 1; i >= 0; i--){
+    const d = st.drawings[i];
+
+    if(d.type === 'line'){
+      const dx = d.ex - d.x, dy = d.ey - d.y;
+      if(dx===0 && dy===0) continue;
+      const t = ((wx-d.x)*dx + (wy-d.y)*dy) / (dx*dx + dy*dy);
+      if(t>=0 && t<=1){
+        const dd = Math.hypot(wx - (d.x + t*dx), wy - (d.y + t*dy));
+        if(dd < tol) return d.id;
+      }
+    } else {
+      const hr = d.type==='circle' ? d.r :
+                (d.type==='label' ? (20/zoom) :
+                (d.type==='bullseye' ? (12/zoom) : tol));
+      if(Math.hypot(wx-d.x, wy-d.y) < hr + tol)
+        return d.id;
+    }
   }
   return null;
 }
+
+  
 
 /* ===== ALT arrastra avión / dibujo ===== */
 let draggingPlane=null,draggingDrawing=null,dragStart=null;
@@ -1377,7 +1546,7 @@ function repaintNav(){
     wrap.appendChild(c);
     const focusables=c.querySelectorAll('.focusable, input, select, button');
     focusables.forEach(el=>{el.addEventListener('focus',()=>el.classList.add('focusGlow'));el.addEventListener('blur',()=>el.classList.remove('focusGlow'));el.addEventListener('click',()=>flash(el));});
-    c.querySelector('#nm-'+id).onchange=e=>p.name=e.target.value;
+    c.querySelector('#nm-'+id).onchange=e=>{p.name=e.target.value; repaintAlt();};
     
      // --- BOTONES DE RUMBO ---
 c.querySelectorAll('button[data-hdg]').forEach(btn=>{
@@ -2249,7 +2418,17 @@ $$('#pFormations button[data-form]').forEach(btn=>{
 
     const L = (st.planes||[]).find(p=>p.id===m.launcher);
     const T = (st.planes||[]).find(p=>p.id===m.tgt);
-    const txt = `MISIL LANZADO: ${L?L.name:m.launcher} → ${T?T.name:m.tgt} (${m.name||'Desconocido'})`;
+    const snapDistNM = st.metric ? (15/NM2KM) : 15; // 15 km or equivalent NM
+const snapActive = pr.dNM <= snapDistNM;
+// SNAP info = CLOCK / DIST / UP-DOWN
+const snapClock = clock;
+const snapDistTxt = dist;
+const snapUD = updown;
+let snapInfo = snapActive ? `${snapClock} / ${snapDistTxt} / ${snapUD}` : 'NY';
+const AA = computeAspectAngle360(B, A);
+      const sector = classifyAspectSector360(AA);
+      const code = getAspectCode(sector);
+      const txt = `${brg} / ${dist} / ${BALT} / ${code}  SNAP (${snapInfo})`;
 
     // Crear aviso en radar (HUD superior)
     const div = document.createElement('div');
@@ -3123,6 +3302,15 @@ if(sala === currentRoom) return;
 </script>
 
 
+
+<script>
+document.querySelectorAll('#pCmdBody .btn').forEach(btn=>{
+  btn.addEventListener('mousedown', ()=>btn.classList.add('btn-hold'));
+  btn.addEventListener('mouseup', ()=>btn.classList.remove('btn-hold'));
+  btn.addEventListener('mouseleave', ()=>btn.classList.remove('btn-hold'));
+});
+</script>
+
 </body>
 </html>
-B Y     W   A   L   L   A   C   E // v2
+B Y     W   A   L   L   A   C   E // v2.2
