@@ -952,12 +952,17 @@ function updatePairs(){
 }
 
 /* === ASPECT ANGLE 360° SYSTEM === */
-function computeAspectAngle360(interceptor, target){
-  const dx = interceptor.x - target.x;
-  const dy = interceptor.y - target.y;
-  let ang = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
-  ang = (ang - target.hdg + 360) % 360;
-  return ang;
+function computeAspectAngle360(target, attacker) {
+  const dx = attacker.x - target.x;
+  const dy = attacker.y - target.y;
+  let los = Math.atan2(dx, -dy) * 180 / Math.PI;
+  if (los < 0) los += 360;
+  const tailHdg = (target.hdg + 180) % 360;
+  let raw = (los - tailHdg + 360) % 360;
+  const hemi = raw <= 180 ? 'R' : 'L';
+  let aa = raw;
+  if (aa > 180) aa = 360 - aa;
+  return { aa, hemi };
 }
 function classifyAspectSector360(AA){
   if (AA >= 340 || AA < 20) return "HOT";
@@ -1004,10 +1009,10 @@ const snapClock = clock;
 const snapDistTxt = dist;
 const snapUD = updown;
 let snapInfo = snapActive ? `${snapClock} / ${snapDistTxt} / ${snapUD}` : 'NY';
-const AA = computeAspectAngle360(B, A);
-      const sector = classifyAspectSector360(AA);
-      const code = getAspectCode(sector);
-      const txt = `${brg} / ${dist} / ${BALT} / ${code}  SNAP (${snapInfo})`;
+const AAinfo = computeAspectAngle360(B, A);
+      const AA = Math.round(AAinfo.aa);
+      const hemi = AAinfo.hemi;
+      const txt = `${brg} / ${dist} / ${BALT} / (${AA}°${hemi}) SNAP (${snapInfo})`;
     ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(midX-95,midY-10,190,20);
     ctx.fillStyle='#eaffea';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(txt,midX,midY+5);
   });
@@ -2425,10 +2430,10 @@ const snapClock = clock;
 const snapDistTxt = dist;
 const snapUD = updown;
 let snapInfo = snapActive ? `${snapClock} / ${snapDistTxt} / ${snapUD}` : 'NY';
-const AA = computeAspectAngle360(B, A);
-      const sector = classifyAspectSector360(AA);
-      const code = getAspectCode(sector);
-      const txt = `${brg} / ${dist} / ${BALT} / ${code}  SNAP (${snapInfo})`;
+const AAinfo = computeAspectAngle360(B, A);
+      const AA = Math.round(AAinfo.aa);
+      const hemi = AAinfo.hemi;
+      const txt = `${brg} / ${dist} / ${BALT} / (${AA}°${hemi}) SNAP (${snapInfo})`;
 
     // Crear aviso en radar (HUD superior)
     const div = document.createElement('div');
@@ -3313,4 +3318,4 @@ document.querySelectorAll('#pCmdBody .btn').forEach(btn=>{
 
 </body>
 </html>
-B Y     W   A   L   L   A   C   E // v2.2
+B Y     W   A   L   L   A   C   E // v2.1
