@@ -862,15 +862,38 @@ function drawPlane(p){
   if(st.predMin>0){const t=st.predMin*60,nmps=(p.spd/NM2KM)/3600;const d=nmps*t;const ex=p.x+Math.cos(lr)*d,ey=p.y+Math.sin(lr)*d;const se=toScreen(ex,ey);ctx.setLineDash([5,5]);ctx.strokeStyle='#2ee74f';ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(se.x,se.y);ctx.stroke();ctx.setLineDash([]);}
   ctx.fillStyle='#eaffea';ctx.font='12px monospace';ctx.textAlign='left';
   if(st.showLabels){
-    ctx.fillText(p.name,s.x+12,s.y-6);
+    if(p.tagDx===undefined) p.tagDx=12;
+    if(p.tagDy===undefined) p.tagDy=-6;
+
+    const bx = s.x + p.tagDx;
+    const by = s.y + p.tagDy;
+
+    const w = 88;
+    const h = 56;
+
+    // --- connector line (very thin) ---
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 0.25;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(bx+4, by+4);
+    ctx.stroke();
+
+    // --- transparent box ---
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 0.4;
+    ctx.strokeRect(bx, by-12, w, h);
+
+    // --- text ---
+    ctx.fillText(p.name, bx+4, by);
     if(st.metric){
-      ctx.fillText(`${(p.alt*FT2M|0)} m`,s.x+12,s.y+8);
-      ctx.fillText(`${p.spd.toFixed(0)} km/h`,s.x+12,s.y+22);
-      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);
+      ctx.fillText(`${(p.alt*FT2M|0)} m`, bx+4, by+14);
+      ctx.fillText(`${p.spd.toFixed(0)} km/h`, bx+4, by+28);
+      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`, bx+4, by+42);
     } else {
-      ctx.fillText(`${p.alt|0} ft`,s.x+12,s.y+8);
-      ctx.fillText(`${(p.spd*KMH2KTS).toFixed(0)} kts`,s.x+12,s.y+22);
-      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`,s.x+12,s.y+36);
+      ctx.fillText(`${p.alt|0} ft`, bx+4, by+14);
+      ctx.fillText(`${(p.spd*KMH2KTS).toFixed(0)} kts`, bx+4, by+28);
+      ctx.fillText(`${String(p.hdg|0).padStart(3,'0')}°`, bx+4, by+42);
     }
   }
   if(st.sel.includes(p.id)){ctx.strokeStyle='#ffe066';ctx.strokeRect(s.x-10,s.y-10,20,20);}
@@ -1217,6 +1240,7 @@ addEventListener('mouseup',()=>{draggingPlane=null;draggingDrawing=null;dragStar
     tool.drawing = true;
   });
   addEventListener('mousemove', e=>{
+    if(e.buttons!==1) return;
     if(!tool.drawing || !tool.a) return;
     const r=cvs.getBoundingClientRect();
     const w=toWorld(e.clientX-r.left, e.clientY-r.top);
@@ -3316,6 +3340,535 @@ document.querySelectorAll('#pCmdBody .btn').forEach(btn=>{
 });
 </script>
 
+
+<script>
+/* === PATCH LOCAL: Data Block movible con CTRL + drag (NO sincroniza) === */
+(function(){
+  const cvs = document.getElementById('radar');
+  if(!cvs) return;
+
+  let draggingTag = null;
+  let tagStart = null;
+
+  function ensureTag(p){
+    if(p.tagDx === undefined) p.tagDx = 12;
+    if(p.tagDy === undefined) p.tagDy = -6;
+  }
+
+  cvs.addEventListener('mousedown', e=>{
+    if(e.button !== 0 || !e.ctrlKey) return;
+
+    const r = cvs.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+
+    const wx = (mx - window.CX - window.offX) / (window.zoom * window.PX_PER_NM);
+    const wy = (my - window.CY - window.offY) / (window.zoom * window.PX_PER_NM);
+
+    let best = null;
+    let bd = 999;
+
+    (window.st.planes || []).forEach(p=>{
+      ensureTag(p);
+      const tx = p.x + p.tagDx/(window.zoom*window.PX_PER_NM);
+      const ty = p.y + p.tagDy/(window.zoom*window.PX_PER_NM);
+      const d = Math.hypot(wx - tx, wy - ty);
+      if(d < 8/(window.zoom*window.PX_PER_NM) && d < bd){
+        bd = d;
+        best = p;
+      }
+    });
+
+    if(best){
+      draggingTag = best;
+      tagStart = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+    }
+  });
+
+  addEventListener('mousemove', e=>{
+    if(e.buttons!==1) return;
+    if(!draggingTag) return;
+    draggingTag.tagDx += (e.clientX - tagStart.x);
+    draggingTag.tagDy += (e.clientY - tagStart.y);
+    tagStart = { x: e.clientX, y: e.clientY };
+  });
+
+  addEventListener('mouseup', ()=>{
+    draggingTag = null;
+    tagStart = null;
+  });
+})();
+</script>
+
+
+<script>
+/* === FIX REAL: CTRL + drag DATA BLOCK (LOCAL ONLY) === */
+(function(){
+  const cvs = document.getElementById('radar');
+  if(!cvs) return;
+
+  let dragging = null;
+  let start = null;
+
+  function hitTag(p, mx, my){
+    if(p.tagDx===undefined) p.tagDx=12;
+    if(p.tagDy===undefined) p.tagDy=-6;
+    const s = {x: window.CX+window.offX+p.x*window.zoom*window.PX_PER_NM,
+               y: window.CY+window.offY+p.y*window.zoom*window.PX_PER_NM};
+    const x = s.x + p.tagDx;
+    const y = s.y + p.tagDy;
+    return (mx>x && mx<x+88 && my>y-12 && my<y+44);
+  }
+
+  cvs.addEventListener('mousedown', e=>{
+    if(e.button!==0 || !(e.key==='z' || e.key==='Z' || e.getModifierState && e.getModifierState('Z'))) return;
+    const r=cvs.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    for(const p of (window.st.planes||[])){
+      if(hitTag(p,mx,my)){
+        dragging=p;
+        start={x:e.clientX,y:e.clientY};
+        e.preventDefault();
+        break;
+      }
+    }
+  });
+
+  addEventListener('mousemove', e=>{
+    if(e.buttons!==1) return;
+    if(!dragging) return;
+    dragging.tagDx += (e.clientX-start.x);
+    dragging.tagDy += (e.clientY-start.y);
+    start={x:e.clientX,y:e.clientY};
+  });
+
+  addEventListener('mouseup', ()=>{
+    dragging=null; start=null;
+  });
+})();
+</script>
+
+
+
+
+
+<script>
+/* === ROBUST LOCAL: Z + drag DATA BLOCK (pointer events, captura, sin sync) === */
+(function(){
+  if(window.__tagDragInstalled) return;
+  window.__tagDragInstalled = true;
+
+  const cvs = document.getElementById('radar');
+  if(!cvs || !window.st) return;
+
+  // Track Z globally
+  window.__zKeyDown = false;
+  addEventListener('keydown', e=>{
+    if(e.key==='z' || e.key==='Z'){ window.__zKeyDown = true; }
+  }, true);
+  addEventListener('keyup', e=>{
+    if(e.key==='z' || e.key==='Z'){ window.__zKeyDown = false; }
+  }, true);
+  addEventListener('blur', ()=>{ window.__zKeyDown = false; }, true);
+
+  let dragging = null;
+  let lastClient = null;
+
+  function ensureTag(p){
+    if(p.tagDx===undefined) p.tagDx=12;
+    if(p.tagDy===undefined) p.tagDy=-6;
+  }
+
+  // Hitbox matches the drawn box; slightly generous
+  function hitTag(p, mx, my){
+    ensureTag(p);
+    const sx = window.CX + window.offX + p.x*window.zoom*window.PX_PER_NM;
+    const sy = window.CY + window.offY + p.y*window.zoom*window.PX_PER_NM;
+    const x  = sx + p.tagDx;
+    const y  = sy + p.tagDy;
+    const w = 96;   // a bit larger than draw
+    const h = 64;
+    return (mx > x-6 && mx < x-6+w && my > (y-18) && my < (y-18)+h);
+  }
+
+  function onPointerDown(e){
+    if(e.button !== 0) return;
+    if(!window.__zKeyDown) return;
+
+    const r = cvs.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+
+    // search top-most first (reverse)
+    const planes = (window.st.planes || []);
+    for(let i=planes.length-1;i>=0;i--){
+      const p = planes[i];
+      if(hitTag(p, mx, my)){
+        dragging = p;
+        lastClient = {x:e.clientX, y:e.clientY};
+        try{ cvs.setPointerCapture(e.pointerId); }catch(_){}
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+    }
+  }
+
+  function onPointerMove(e){
+    if(!dragging) return;
+    if(!(e.buttons & 1)) return; // only while left pressed
+
+    const dx = e.clientX - lastClient.x;
+    const dy = e.clientY - lastClient.y;
+
+    dragging.tagDx += dx;
+    dragging.tagDy += dy;
+
+    lastClient = {x:e.clientX, y:e.clientY};
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function onPointerUp(e){
+    if(!dragging) return;
+    dragging = null;
+    lastClient = null;
+    try{ cvs.releasePointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  // Use capture phase to beat existing handlers
+  cvs.addEventListener('pointerdown', onPointerDown, true);
+  addEventListener('pointermove', onPointerMove, true);
+  addEventListener('pointerup', onPointerUp, true);
+  addEventListener('pointercancel', onPointerUp, true);
+})();
+</script>
+
+
+<script>
+/* === DEFINITIVO: DataBlock como OBJETO LÓGICO (Z + drag, LOCAL, sin romper nada) === */
+(function(){
+  if(window.__dataBlockLogicInstalled) return;
+  window.__dataBlockLogicInstalled = true;
+
+  const cvs = document.getElementById('radar');
+  if(!cvs || !window.st) return;
+
+  // --- track Z ---
+  let zDown = false;
+  addEventListener('keydown',e=>{ if(e.key==='z'||e.key==='Z') zDown=true; },true);
+  addEventListener('keyup',e=>{ if(e.key==='z'||e.key==='Z') zDown=false; },true);
+  addEventListener('blur',()=>{ zDown=false; },true);
+
+  let draggingPlane = null;
+  let lastWorld = null;
+
+  function ensureBlock(p){
+    if(!p.dataBlock){
+      p.dataBlock = {
+        dx: (p.tagDx!==undefined?p.tagDx:12)/(window.zoom*window.PX_PER_NM),
+        dy: (p.tagDy!==undefined?p.tagDy:-6)/(window.zoom*window.PX_PER_NM),
+        w: 0.12,
+        h: 0.08
+      };
+    }
+  }
+
+  function screenToWorld(mx,my){
+    return {
+      x:(mx-window.CX-window.offX)/(window.zoom*window.PX_PER_NM),
+      y:(my-window.CY-window.offY)/(window.zoom*window.PX_PER_NM)
+    };
+  }
+
+  function hitBlock(p,wx,wy){
+    ensureBlock(p);
+    const bx = p.x + p.dataBlock.dx;
+    const by = p.y + p.dataBlock.dy;
+    return (
+      wx>bx && wx<bx+p.dataBlock.w &&
+      wy>by && wy<by+p.dataBlock.h
+    );
+  }
+
+  cvs.addEventListener('mousedown',e=>{
+    if(e.button!==0 || !zDown) return;
+
+    const r=cvs.getBoundingClientRect();
+    const w=screenToWorld(e.clientX-r.left,e.clientY-r.top);
+
+    for(const p of (window.st.planes||[])){
+      if(hitBlock(p,w.x,w.y)){
+        draggingPlane=p;
+        lastWorld=w;
+        e.preventDefault();
+        e.stopPropagation();
+        break;
+      }
+    }
+  },true);
+
+  addEventListener('mousemove',e=>{
+    if(!draggingPlane) return;
+    const r=cvs.getBoundingClientRect();
+    const w=screenToWorld(e.clientX-r.left,e.clientY-r.top);
+
+    const dx=w.x-lastWorld.x;
+    const dy=w.y-lastWorld.y;
+
+    draggingPlane.dataBlock.dx+=dx;
+    draggingPlane.dataBlock.dy+=dy;
+
+    draggingPlane.tagDx = draggingPlane.dataBlock.dx*(window.zoom*window.PX_PER_NM);
+    draggingPlane.tagDy = draggingPlane.dataBlock.dy*(window.zoom*window.PX_PER_NM);
+
+    lastWorld=w;
+    e.preventDefault();
+    e.stopPropagation();
+  },true);
+
+  addEventListener('mouseup',()=>{
+    draggingPlane=null;
+    lastWorld=null;
+  },true);
+
+})();
+</script>
+
+
+<script>
+/* === FINAL HARD FIX: Window-level Z + drag DataBlock (LOCAL ONLY) === */
+(function(){
+  if(window.__FINAL_DATABLOCK_DRAG__) return;
+  window.__FINAL_DATABLOCK_DRAG__ = true;
+
+  let zDown = false;
+  window.addEventListener('keydown',e=>{
+    if(e.key==='z' || e.key==='Z') zDown = true;
+  }, true);
+  window.addEventListener('keyup',e=>{
+    if(e.key==='z' || e.key==='Z') zDown = false;
+  }, true);
+  window.addEventListener('blur',()=>{ zDown=false; }, true);
+
+  let dragging = null;
+  let lastWorld = null;
+
+  function screenToWorld(mx,my){
+    return {
+      x:(mx-window.CX-window.offX)/(window.zoom*window.PX_PER_NM),
+      y:(my-window.CY-window.offY)/(window.zoom*window.PX_PER_NM)
+    };
+  }
+
+  function ensureBlock(p){
+    if(!p.dataBlock){
+      p.dataBlock = {dx:0.02, dy:-0.01, w:0.12, h:0.08};
+    }
+  }
+
+  function hitBlock(p, wx, wy){
+    ensureBlock(p);
+    const bx = p.x + p.dataBlock.dx;
+    const by = p.y + p.dataBlock.dy;
+    return wx>bx && wx<bx+p.dataBlock.w && wy>by && wy<by+p.dataBlock.h;
+  }
+
+  window.addEventListener('mousedown',e=>{
+    if(e.button!==0 || !zDown || !window.st) return;
+    const w = screenToWorld(e.clientX, e.clientY);
+    for(const p of window.st.planes||[]){
+      if(hitBlock(p, w.x, w.y)){
+        dragging = p;
+        lastWorld = w;
+        e.preventDefault();
+        e.stopPropagation();
+        break;
+      }
+    }
+  }, true);
+
+  window.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    const w = screenToWorld(e.clientX, e.clientY);
+    const dx = w.x - lastWorld.x;
+    const dy = w.y - lastWorld.y;
+    dragging.dataBlock.dx += dx;
+    dragging.dataBlock.dy += dy;
+    dragging.tagDx = dragging.dataBlock.dx*(window.zoom*window.PX_PER_NM);
+    dragging.tagDy = dragging.dataBlock.dy*(window.zoom*window.PX_PER_NM);
+    lastWorld = w;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+  window.addEventListener('mouseup',()=>{
+    dragging = null;
+    lastWorld = null;
+  }, true);
+
+})();
+</script>
+
+
+<script>
+/* === FINAL FIX V2: Z + click + ARRRASTRAR Data Block (usa tagDx/tagDy + toScreen, LOCAL) === */
+(function(){
+  if(window.__DB_ZDRAG_V2__) return;
+  window.__DB_ZDRAG_V2__ = true;
+
+  const cvs = document.getElementById('radar');
+  if(!cvs || !window.st || typeof toScreen!=='function') return;
+
+  // Tecla Z global (no depende de foco)
+  let zDown=false;
+  window.addEventListener('keydown', e=>{ if(e.key==='z'||e.key==='Z') zDown=true; }, true);
+  window.addEventListener('keyup', e=>{ if(e.key==='z'||e.key==='Z') zDown=false; }, true);
+  window.addEventListener('blur', ()=>{ zDown=false; }, true);
+
+  // Drag state
+  let dragging=null;
+  let last=null;
+
+  // Caja (debe coincidir con el dibujo)
+  const BOX_W=88;
+  const BOX_H=56;
+  const BOX_TOP=-12; // y = by-12
+
+  function ensureTag(p){
+    if(p.tagDx===undefined) p.tagDx=12;
+    if(p.tagDy===undefined) p.tagDy=-6;
+  }
+
+  function getCanvasXY(ev){
+    const r = cvs.getBoundingClientRect();
+    const mx = ev.clientX - r.left;
+    const my = ev.clientY - r.top;
+    if(mx<0 || my<0 || mx>r.width || my>r.height) return null;
+    return {mx,my};
+  }
+
+  function hitPlaneBlock(p, mx, my){
+    ensureTag(p);
+    const s = toScreen(p.x, p.y);
+    const bx = s.x + p.tagDx;
+    const by = s.y + p.tagDy;
+    const x0 = bx;
+    const y0 = by + BOX_TOP;
+    return (mx>=x0 && mx<=x0+BOX_W && my>=y0 && my<=y0+BOX_H);
+  }
+
+  // Escuchar desde WINDOW para que overlays no bloqueen
+  window.addEventListener('mousedown', (e)=>{
+    if(e.button!==0 || !zDown) return;
+    if(!window.st || !Array.isArray(st.planes)) return;
+
+    const pt = getCanvasXY(e);
+    if(!pt) return;
+
+    // Buscar el block más cercano/último (de arriba)
+    for(let i=st.planes.length-1;i>=0;i--){
+      const p = st.planes[i];
+      if(hitPlaneBlock(p, pt.mx, pt.my)){
+        dragging = p;
+        last = pt;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+    }
+  }, true);
+
+  window.addEventListener('mousemove', (e)=>{
+    if(!dragging) return;
+    const pt = getCanvasXY(e);
+    if(!pt) return;
+
+    const dx = pt.mx - last.mx;
+    const dy = pt.my - last.my;
+
+    dragging.tagDx = (dragging.tagDx||0) + dx;
+    dragging.tagDy = (dragging.tagDy||0) + dy;
+
+    last = pt;
+
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+  window.addEventListener('mouseup', (e)=>{
+    if(!dragging) return;
+    dragging = null;
+    last = null;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+})();
+</script>
+
+
+<script>
+/* === HARD LOCAL LOCK: DataBlock NEVER syncs to Firebase === */
+(function(){
+  if(window.__DATABLOCK_LOCAL_LOCK__) return;
+  window.__DATABLOCK_LOCAL_LOCK__ = true;
+
+  // Mark fields as local-only
+  function stripLocal(p){
+    if(!p) return;
+    delete p.tagDx;
+    delete p.tagDy;
+    delete p.dataBlock;
+  }
+
+  // Patch common sync functions if present
+  const syncFns = ['scheduleSync','pushState','syncNow','sendState','saveState'];
+  syncFns.forEach(fn=>{
+    if(typeof window[fn]==='function'){
+      const orig = window[fn];
+      window[fn] = function(state){
+        try{
+          if(state && state.planes){
+            state.planes.forEach(stripLocal);
+          }
+        }catch(e){}
+        return orig.apply(this, arguments);
+      };
+    }
+  });
+
+  // Patch Firebase direct writes (defensive)
+  if(window.firebase && firebase.database){
+    const db = firebase.database();
+    const origSet = db.ref().set;
+    const origUpdate = db.ref().update;
+
+    db.ref().set = function(data){
+      try{
+        if(data && data.planes){
+          data.planes.forEach(stripLocal);
+        }
+      }catch(e){}
+      return origSet.apply(this, arguments);
+    };
+
+    db.ref().update = function(data){
+      try{
+        if(data && data.planes){
+          data.planes.forEach(stripLocal);
+        }
+      }catch(e){}
+      return origUpdate.apply(this, arguments);
+    };
+  }
+
+})();
+</script>
+
 </body>
 </html>
-B Y     W   A   L   L   A   C   E // v2.1
+B Y     W   A   L   L   A   C   E // MOD 12-12-2025 1106
