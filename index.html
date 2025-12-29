@@ -1,4 +1,4 @@
-ESTE SIMULADOR SE ENCUENTRA EN FASE DE PRUEBA - PUEDEN OCURRIR ERRORES DURANTE EL FUNCIONAMIENTO 
+ESTE SIMULADOR SE ENCUENTRA EN FASE DE PRUEBA - PUEDEN OCURRIR ERRORES DURANTE EL FUNCIONAMIENTO 2.2
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -65,7 +65,7 @@ document.getElementById('cancelDelete').onclick = ()=>{
   async function pushStateToCloud(local) {
     if (!local) return;
     const payload = {
-      planes: local.planes,
+      planes: (local.planes||[]).map(p=>{const q={...p};delete q.dataBlock; delete q.tagDx; delete q.tagDy;return q;}),
       roles: local.roles,
       drawings: local.drawings, 
       mode: local.mode,
@@ -82,9 +82,28 @@ document.getElementById('cancelDelete').onclick = ()=>{
     const v = snap.val();
     if (!v || v.lastWriteBy === currentUID) return;
     try {
+      // Preserve local-only DataBlock positions (per-device)
+      const __dbLocalMap = new Map();
+      (st.planes||[]).forEach(p=>{
+        if(!p) return;
+        const key = (p.id ?? p.name);
+        if(key && p.dataBlock) __dbLocalMap.set(String(key), p.dataBlock);
+      });
+
       if (Array.isArray(v.planes)) st.planes = v.planes;
       else if (v.planes && typeof v.planes === "object") st.planes = Object.values(v.planes);
-      if (v.roles) st.roles = v.roles; 
+
+      // Strip any remote DataBlock fields and reapply local positions
+      (st.planes||[]).forEach(p=>{
+        if(!p) return;
+        delete p.tagDx; delete p.tagDy; delete p.dataBlock;
+        const key = (p.id ?? p.name);
+        if(key && __dbLocalMap.has(String(key))){
+          p.dataBlock = __dbLocalMap.get(String(key));
+        }
+      });
+
+if (v.roles) st.roles = v.roles; 
       if (v.drawings) st.drawings = v.drawings;
       if (v.mode) st.mode = v.mode;if (typeof v.metric === "boolean") st.metric = v.metric;
       if (v.altUnit) st.altUnit = v.altUnit;
@@ -3811,64 +3830,6 @@ document.querySelectorAll('#pCmdBody .btn').forEach(btn=>{
 </script>
 
 
-<script>
-/* === HARD LOCAL LOCK: DataBlock NEVER syncs to Firebase === */
-(function(){
-  if(window.__DATABLOCK_LOCAL_LOCK__) return;
-  window.__DATABLOCK_LOCAL_LOCK__ = true;
-
-  // Mark fields as local-only
-  function stripLocal(p){
-    if(!p) return;
-    delete p.tagDx;
-    delete p.tagDy;
-    delete p.dataBlock;
-  }
-
-  // Patch common sync functions if present
-  const syncFns = ['scheduleSync','pushState','syncNow','sendState','saveState'];
-  syncFns.forEach(fn=>{
-    if(typeof window[fn]==='function'){
-      const orig = window[fn];
-      window[fn] = function(state){
-        try{
-          if(state && state.planes){
-            state.planes.forEach(stripLocal);
-          }
-        }catch(e){}
-        return orig.apply(this, arguments);
-      };
-    }
-  });
-
-  // Patch Firebase direct writes (defensive)
-  if(window.firebase && firebase.database){
-    const db = firebase.database();
-    const origSet = db.ref().set;
-    const origUpdate = db.ref().update;
-
-    db.ref().set = function(data){
-      try{
-        if(data && data.planes){
-          data.planes.forEach(stripLocal);
-        }
-      }catch(e){}
-      return origSet.apply(this, arguments);
-    };
-
-    db.ref().update = function(data){
-      try{
-        if(data && data.planes){
-          data.planes.forEach(stripLocal);
-        }
-      }catch(e){}
-      return origUpdate.apply(this, arguments);
-    };
-  }
-
-})();
-</script>
-
 </body>
 </html>
-B Y     W   A   L   L   A   C   E // MOD 12-12-2025 1106
+B Y     W   A   L   L   A   C   E // v2.1
