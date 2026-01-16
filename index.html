@@ -65,7 +65,7 @@ document.getElementById('cancelDelete').onclick = ()=>{
   async function pushStateToCloud(local) {
     if (!local) return;
     const payload = {
-      planes: (local.planes||[]).map(p=>{const q={...p};delete q.dataBlock; delete q.tagDx; delete q.tagDy;return q;}),
+      planes: local.planes,
       roles: local.roles,
       drawings: local.drawings, 
       mode: local.mode,
@@ -82,28 +82,9 @@ document.getElementById('cancelDelete').onclick = ()=>{
     const v = snap.val();
     if (!v || v.lastWriteBy === currentUID) return;
     try {
-      // Preserve local-only DataBlock positions (per-device)
-      const __dbLocalMap = new Map();
-      (st.planes||[]).forEach(p=>{
-        if(!p) return;
-        const key = (p.id ?? p.name);
-        if(key && p.dataBlock) __dbLocalMap.set(String(key), p.dataBlock);
-      });
-
       if (Array.isArray(v.planes)) st.planes = v.planes;
       else if (v.planes && typeof v.planes === "object") st.planes = Object.values(v.planes);
-
-      // Strip any remote DataBlock fields and reapply local positions
-      (st.planes||[]).forEach(p=>{
-        if(!p) return;
-        delete p.tagDx; delete p.tagDy; delete p.dataBlock;
-        const key = (p.id ?? p.name);
-        if(key && __dbLocalMap.has(String(key))){
-          p.dataBlock = __dbLocalMap.get(String(key));
-        }
-      });
-
-if (v.roles) st.roles = v.roles; 
+      if (v.roles) st.roles = v.roles; 
       if (v.drawings) st.drawings = v.drawings;
       if (v.mode) st.mode = v.mode;if (typeof v.metric === "boolean") st.metric = v.metric;
       if (v.altUnit) st.altUnit = v.altUnit;
@@ -1943,6 +1924,36 @@ $$('#pFormations button[data-form]').forEach(btn=>{
           window.setcaRooms.open();
         }
       });
+
+      // Boton OFF: muestra resumen de sesion y cierra
+      let offBtn = document.getElementById('offBtn');
+      if(!offBtn){
+        offBtn = document.createElement('button');
+        offBtn.id = 'offBtn';
+        offBtn.textContent = '⏻ OFF';
+        offBtn.title = 'Salir de SETCA';
+        offBtn.style.marginLeft = '6px';
+        offBtn.style.borderColor = '#b33';
+        offBtn.style.color = '#fff';
+        offBtn.style.background = '#3a1111';
+        hdr.appendChild(offBtn);
+      }
+      offBtn.addEventListener('click', ()=>{
+        if(typeof window.setcaOff === 'function'){
+          window.setcaOff();
+        }else{
+          // Fallback si el modulo de salas aun no cargo
+          const start = Number(sessionStorage.getItem('setca_session_start')||Date.now());
+          const ms = Date.now() - start;
+          const s = Math.max(0, Math.floor(ms/1000));
+          const hh = String(Math.floor(s/3600)).padStart(2,'0');
+          const mm = String(Math.floor((s%3600)/60)).padStart(2,'0');
+          const ss = String(s%60).padStart(2,'0');
+          alert('Tiempo conectado: ' + hh + ':' + mm + ':' + ss + '\n(Salas aun no inicializadas)');
+          try{ window.close(); }catch(_){ }
+          location.href = 'about:blank';
+        }
+      });
     }
     const toHide = ['#pCmd','#pPlanes','#pNav','#pFormations','#pDraw'];
     alumnoBtn.addEventListener('click', ()=>{
@@ -2652,12 +2663,8 @@ const AAinfo = computeAspectAngle360(B, A);
   if(!btn) return;
   btn.onclick = ()=>{
     if(!st || !Array.isArray(st.planes) || st.planes.length===0) return;
-    const options = st.planes.map(p=> `${p.id} — ${p.name}`).join('
-');
-    const pick = prompt('Eliminar avión (ID — Nombre):
-' + options + '
-
-Escribe el ID exactamente tal cual aparece:');
+    const options = st.planes.map(p=> `${p.id} — ${p.name}`).join('\n');
+    const pick = prompt('Eliminar avion (ID - Nombre):\n' + options + '\n\nEscribe el ID exactamente tal cual aparece:');
     if(!pick) return;
     const id = pick.split('—')[0].trim();
     const before = st.planes.length;
@@ -3199,6 +3206,17 @@ function getRoomId(){
 }
 let currentRoom = getRoomId();
 
+// ---- Session tracking (persiste por pestana) ----
+const __sessKey = 'setca_session_start';
+let sessionStart = Number(sessionStorage.getItem(__sessKey) || 0);
+if(!sessionStart){
+  sessionStart = Date.now();
+  try{ sessionStorage.setItem(__sessKey, String(sessionStart)); }catch(_){ }
+}
+
+// Cache global de usuarios por sala
+window.__setcaPresence = window.__setcaPresence || {};
+
 let username = localStorage.getItem("setca_username") || "sinNombre";
 
 const modal = document.getElementById("roomsModal");
@@ -3211,6 +3229,8 @@ const closeBtn = document.getElementById("roomsClose");
 if(usernameInput){ usernameInput.value = username; }
 
 function refreshCurrent(){
+  // Exponer sala actual para otros componentes
+  window.__setcaCurrentRoom = currentRoom || 'sala-default';
   if(roomsCurrent){
     roomsCurrent.textContent = "Sala actual: " + String(currentRoom||"sala-default").toUpperCase();
   }
@@ -3269,6 +3289,8 @@ function startPresence(){
       const val = snap.val() || {};
       const entries = Object.values(val);
       const names = entries.map(v => (v && v.name) ? v.name : "sinNombre");
+      // Guardar cache de presencia
+      try{ window.__setcaPresence[sala] = names.slice(); }catch(_){ }
       const count = names.length;
       const rowId = "room-row-" + sala;
       let row = document.getElementById(rowId);
@@ -3291,6 +3313,7 @@ function startPresence(){
     const nameToUse = (usernameInput && usernameInput.value) ? usernameInput.value : username;
     username = nameToUse || username;
     localStorage.setItem("setca_username", username);
+    window.__setcaUsername = username;
     const meRef = ref(db, `rooms/${currentRoom}/users/${uid}`);
     set(meRef, { name: username, t: Date.now() });
   }, 5000);
@@ -3332,6 +3355,62 @@ document.addEventListener("click", (e)=>{
     e.stopPropagation();
   }
 });
+
+// ---- OFF: resumen de sesion + cleanup de presencia + cierre ----
+window.setcaOff = async function(){
+  try{
+    const start = sessionStart || Number(sessionStorage.getItem(__sessKey) || Date.now());
+    const ms = Date.now() - start;
+    const s = Math.max(0, Math.floor(ms/1000));
+    const hh = String(Math.floor(s/3600)).padStart(2,'0');
+    const mm = String(Math.floor((s%3600)/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+
+    const room = String(currentRoom || 'sala-default');
+    const users = (window.__setcaPresence && window.__setcaPresence[room]) ? window.__setcaPresence[room] : [];
+
+    const planes = (window.st && Array.isArray(window.st.planes)) ? window.st.planes : [];
+    const planeNames = planes.map(p => (p && (p.name || p.id)) ? (p.name || p.id) : 'sinID');
+
+    // Limpiar presencia propia
+    try{
+      if(uid){
+        await set(ref(db, `rooms/${room}/users/${uid}`), null);
+      }
+    }catch(e){
+      console.warn('OFF: no se pudo limpiar presencia', e);
+    }
+
+    const msg = [
+      'SETCA - Cierre de sesion',
+      '-----------------------',
+      `Indicativo: ${window.__setcaUsername || username || 'sinNombre'}`,
+      `Sala: ${room.toUpperCase()}`,
+      `Tiempo conectado: ${hh}:${mm}:${ss}`,
+      '',
+      `Usuarios conectados (${users.length}):`,
+      (users.length ? ' - ' + users.join('\n - ') : ' - (ninguno)'),
+      '',
+      `Aviones en frecuencia (${planes.length}):`,
+      (planeNames.length ? ' - ' + planeNames.join('\n - ') : ' - (ninguno)')
+    ].join('\n');
+
+    alert(msg);
+
+    // Intentar cerrar la pestana/ventana
+    try{ window.close(); }catch(_){ }
+    // Si el navegador no permite cerrar, al menos detenemos la app
+    setTimeout(()=>{
+      try{ window.close(); }catch(_){ }
+      try{ location.href = 'about:blank'; }catch(_){ }
+    }, 80);
+  }catch(err){
+    console.error('OFF handler error:', err);
+    alert('No se pudo cerrar correctamente. Puedes cerrar la pestana manualmente.');
+    try{ location.href = 'about:blank'; }catch(_){ }
+  }
+};
+
 function chooseRoom(sala){
   const prevRoom = currentRoom;
 if(sala === currentRoom) return;
@@ -3830,6 +3909,65 @@ document.querySelectorAll('#pCmdBody .btn').forEach(btn=>{
 </script>
 
 
+<script>
+/* === HARD LOCAL LOCK: DataBlock NEVER syncs to Firebase === */
+(function(){
+  if(window.__DATABLOCK_LOCAL_LOCK__) return;
+  window.__DATABLOCK_LOCAL_LOCK__ = true;
+
+  // Mark fields as local-only
+  function stripLocal(p){
+    if(!p) return;
+    delete p.tagDx;
+    delete p.tagDy;
+    delete p.dataBlock;
+  }
+
+  // Patch common sync functions if present
+  const syncFns = ['scheduleSync','pushState','syncNow','sendState','saveState'];
+  syncFns.forEach(fn=>{
+    if(typeof window[fn]==='function'){
+      const orig = window[fn];
+      window[fn] = function(state){
+        try{
+          if(state && state.planes){
+            state.planes.forEach(stripLocal);
+          }
+        }catch(e){}
+        return orig.apply(this, arguments);
+      };
+    }
+  });
+
+  // Patch Firebase direct writes (defensive)
+  if(window.firebase && firebase.database){
+    const db = firebase.database();
+    const origSet = db.ref().set;
+    const origUpdate = db.ref().update;
+
+    db.ref().set = function(data){
+      try{
+        if(data && data.planes){
+          data.planes.forEach(stripLocal);
+        }
+      }catch(e){}
+      return origSet.apply(this, arguments);
+    };
+
+    db.ref().update = function(data){
+      try{
+        if(data && data.planes){
+          data.planes.forEach(stripLocal);
+        }
+      }catch(e){}
+      return origUpdate.apply(this, arguments);
+    };
+  }
+
+})();
+</script>
+
 </body>
 </html>
-B Y     W   A   L   L   A   C   E // v2.1
+B Y     W   A   L   L   A   C   E // v2.2
+
